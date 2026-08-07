@@ -62,7 +62,7 @@ download_file() {
 for entry in "${FILE_INFOS[@]}"; do
   URL=$(echo "$entry" | cut -d ' ' -f1)
   NAME=$(echo "$entry" | cut -d ' ' -f2)
-  NEW_NAME="${FILE_PATH}/$(head /dev/urandom | tr -dc a-z0-9 | head -c6)"
+  NEW_NAME="${FILE_PATH}/sing-box-bin"
   download_file "${BASE_URL}/${URL}" "$NEW_NAME"
   chmod +x "$NEW_NAME"
   FILE_MAP[$NAME]="$NEW_NAME"
@@ -157,7 +157,7 @@ cat > "${FILE_PATH}/config.json" <<EOF
 EOF
 
 # ================== 启动 sing-box ==================
-"${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" &
+"${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" >/dev/null 2>&1 &
 SINGBOX_PID=$!
 echo "[SING-BOX] 启动完成 PID=$SINGBOX_PID"
 
@@ -195,7 +195,7 @@ schedule_restart() {
       kill "$SINGBOX_PID" 2>/dev/null || true
       sleep 3
 
-      "${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" &
+      "${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" >/dev/null 2>&1 &
       SINGBOX_PID=$!
 
       echo "[Sing-box重启完成] 新 PID: $SINGBOX_PID"

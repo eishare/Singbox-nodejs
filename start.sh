@@ -1,4 +1,4 @@
-##!/bin/bash
+#!/bin/bash
 set -e
 
 # ================== 端口设置 ==================
@@ -33,44 +33,101 @@ fi
 # ================== 创建目录 ==================
 [ ! -d "${FILE_PATH}" ] && mkdir -p "${FILE_PATH}"
 
-# ================== 架构检测 & 下载 sing-box ==================
+# ================== 架构检测 & 下载 sing-box (完全修复) ==================
 ARCH=$(uname -m)
-BASE_URL=""
+SINGBOX_VERSION="1.10.0"
+FILE_NAME=""
+ARCH_SUFFIX=""
+
 if [[ "$ARCH" == "arm"* ]] || [[ "$ARCH" == "aarch64" ]]; then
-  BASE_URL="https://arm64.ssss.nyc.mn"
+  ARCH_SUFFIX="arm64"
 elif [[ "$ARCH" == "amd64"* ]] || [[ "$ARCH" == "x86_64" ]]; then
-  BASE_URL="https://amd64.ssss.nyc.mn"
+  ARCH_SUFFIX="amd64"
 elif [[ "$ARCH" == "s390x" ]]; then
-  BASE_URL="https://s390x.ssss.nyc.mn"
+  ARCH_SUFFIX="s390x"
 else
   echo "不支持的架构: $ARCH"
   exit 1
 fi
 
-FILE_INFOS=("sb sing-box")
-declare -A FILE_MAP
+# 构建文件名和下载URL (必须带 .tar.gz)
+TAR_FILE="sing-box-${SINGBOX_VERSION}-linux-${ARCH_SUFFIX}.tar.gz"
+GITHUB_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VERSION}/${TAR_FILE}"
+MIRROR_URL="https://gh.api.99988866.xyz/${GITHUB_URL}" # 使用更稳定的镜像
+
+# 临时下载路径
+TEMP_TAR="${FILE_PATH}/${TAR_FILE}"
+# 最终二进制路径 (随机命名)
+FINAL_BIN="${FILE_PATH}/$(head /dev/urandom | tr -dc a-z0-9 | head -c6)"
 
 download_file() {
   local URL=$1
-  local FILENAME=$2
-  if command -v curl >/dev/null 2>&1; then
-    curl -L -sS -o "$FILENAME" "$URL" && echo -e "\e[1;32m下载 $FILENAME (curl)\e[0m"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$FILENAME" "$URL" && echo -e "\e[1;32m下载 $FILENAME (wget)\e[0m"
-  else
-    echo -e "\e[1;31m未找到 curl 或 wget\e[0m"
-    exit 1
+  local OUTPUT=$2
+  local NO_CERT=$3
+  
+  if command -v wget >/dev/null 2>&1; then
+    if [ "$NO_CERT" == "1" ]; then
+      wget --no-check-certificate -q -T 10 -t 2 -O "$OUTPUT" "$URL" && return 0
+    else
+      wget -q -T 10 -t 2 -O "$OUTPUT" "$URL" && return 0
+    fi
+  elif command -v curl >/dev/null 2>&1; then
+    if [ "$NO_CERT" == "1" ]; then
+      curl -k -L --connect-timeout 10 --max-time 300 -sS -o "$OUTPUT" "$URL" && return 0
+    else
+      curl -L --connect-timeout 10 --max-time 300 -sS -o "$OUTPUT" "$URL" && return 0
+    fi
   fi
+  return 1
 }
 
-for entry in "${FILE_INFOS[@]}"; do
-  URL=$(echo "$entry" | cut -d ' ' -f1)
-  NAME=$(echo "$entry" | cut -d ' ' -f2)
-  NEW_NAME="${FILE_PATH}/$(head /dev/urandom | tr -dc a-z0-9 | head -c6)"
-  download_file "${BASE_URL}/${URL}" "$NEW_NAME"
-  chmod +x "$NEW_NAME"
-  FILE_MAP[$NAME]="$NEW_NAME"
-done
+echo -e "\e[1;33m[下载] 正在从 GitHub 下载 ${TAR_FILE}...\e[0m"
+DOWNLOAD_SUCCESS=0
+
+# 1. 尝试 GitHub 官方源
+if download_file "$GITHUB_URL" "$TEMP_TAR" "0"; then
+  echo -e "\e[1;32m[下载] GitHub 下载成功\e[0m"
+  DOWNLOAD_SUCCESS=1
+else
+  echo -e "\e[1;31m[下载] GitHub 连接失败，尝试国内镜像...\e[0m"
+  # 2. 尝试 镜像源 (忽略证书验证)
+  if download_file "$MIRROR_URL" "$TEMP_TAR" "1"; then
+    echo -e "\e[1;32m[下载] 镜像下载成功\e[0m"
+    DOWNLOAD_SUCCESS=1
+  else
+    echo -e "\e[1;31m[错误] 所有下载源均失败，请检查网络\e[0m"
+    exit 1
+  fi
+fi
+
+# 解压并提取二进制文件
+echo -e "\e[1;33m[解压] 正在提取 sing-box 二进制文件...\e[0m"
+if ! command -v tar >/dev/null 2>&1; then
+  echo "未找到 tar 命令，无法解压"
+  exit 1
+fi
+
+# 解压到临时目录
+EXTRACT_DIR="${FILE_PATH}/temp_extract"
+rm -rf "$EXTRACT_DIR"
+mkdir -p "$EXTRACT_DIR"
+tar -xzf "$TEMP_TAR" -C "$EXTRACT_DIR"
+
+# 查找解压后的 sing-box 文件并移动
+FOUND_BIN=$(find "$EXTRACT_DIR" -type f -name "sing-box" | head -n 1)
+if [ -z "$FOUND_BIN" ]; then
+  echo "[错误] 压缩包内未找到 sing-box 文件"
+  exit 1
+fi
+
+mv "$FOUND_BIN" "$FINAL_BIN"
+chmod +x "$FINAL_BIN"
+
+# 清理
+rm -rf "$EXTRACT_DIR" "$TEMP_TAR"
+
+declare -A FILE_MAP
+FILE_MAP["sing-box"]="$FINAL_BIN"
 
 # ================== 固定 Reality 密钥 ==================
 KEY_FILE="${FILE_PATH}/key.txt"

@@ -47,9 +47,6 @@ else
   exit 1
 fi
 
-FILE_INFOS=("sb sing-box")
-declare -A FILE_MAP
-
 download_file() {
   local URL=$1
   local FILENAME=$2
@@ -63,14 +60,15 @@ download_file() {
   fi
 }
 
-for entry in "${FILE_INFOS[@]}"; do
-  URL=$(echo "$entry" | cut -d ' ' -f1)
-  NAME=$(echo "$entry" | cut -d ' ' -f2)
-  NEW_NAME="${FILE_PATH}/$(head /dev/urandom | tr -dc a-z0-9 | head -c6)"
-  download_file "${BASE_URL}/${URL}" "$NEW_NAME"
-  chmod +x "$NEW_NAME"
-  FILE_MAP[$NAME]="$NEW_NAME"
-done
+# 优化：采用固定的文件名 sb_core，避免每次重启都生成随机名文件导致重复占用磁盘
+SINGBOX_BIN="${FILE_PATH}/sb_core"
+if [ ! -f "$SINGBOX_BIN" ]; then
+  echo -e "\e[1;33m[下载] 未检测到 Sing-box 核心，开始下载...\e[0m"
+  download_file "${BASE_URL}/sb" "$SINGBOX_BIN"
+  chmod +x "$SINGBOX_BIN"
+else
+  echo -e "\e[1;32m[核心] 已存在 Sing-box 核心，跳过下载\e[0m"
+fi
 
 # ================== 固定 Reality 密钥 ==================
 KEY_FILE="${FILE_PATH}/key.txt"
@@ -80,7 +78,7 @@ if [ -f "$KEY_FILE" ]; then
   public_key=$(grep "PublicKey:" "$KEY_FILE" | awk '{print $2}')
 else
   echo -e "\e[1;33m[密钥] 首次生成 Reality 密钥对...\e[0m"
-  output=$("${FILE_MAP[sing-box]}" generate reality-keypair)
+  output=$("$SINGBOX_BIN" generate reality-keypair)
   echo "$output" > "$KEY_FILE"
   private_key=$(echo "$output" | awk '/PrivateKey:/ {print $2}')
   public_key=$(echo "$output" | awk '/PublicKey:/ {print $2}')
@@ -161,7 +159,7 @@ cat > "${FILE_PATH}/config.json" <<EOF
 EOF
 
 # ================== 启动 sing-box ==================
-"${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" &
+"$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" &
 SINGBOX_PID=$!
 echo "[SING-BOX] 启动完成 PID=$SINGBOX_PID"
 
@@ -201,7 +199,7 @@ schedule_restart() {
       
       rm -rf ~/.npm/_logs/* ./npm-debug.log* "${DATA_PATH}"/* /tmp/.singbox_* 2>/dev/null || true
 
-      "${FILE_MAP[sing-box]}" run -c "${FILE_PATH}/config.json" &
+      "$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" &
       SINGBOX_PID=$!
 
       echo "[Sing-box重启完成] 新 PID: $SINGBOX_PID"

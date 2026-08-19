@@ -2,7 +2,7 @@
     
 ### tuic+reality双节点，运行内存占用低于55MB
 
-### 除非运营商QoS严重，64MB机器建议只部署tuic节点   
+### 除非运营商QoS严重，64MB机器建议只部署tuic节点，运行内存<30MB 
 
 * 精简化：去除哪吒、argo隧道；保留3种协议：tuic、hy2、vless+xtls+reality
 

@@ -1,4 +1,8 @@
-### 更新说明：适用128M内存以上环境，不建议freecloudpanel使用（64M内存）
+### 内存极限优化版-适配64MB机器-开机常驻内存≈20MB
+    
+### tuic+reality双节点，运行内存占用低于55MB
+
+### 除非运营商QoS严重，64MB机器建议只部署tuic节点   
 
 * 精简化：去除哪吒、argo隧道；保留3种协议：tuic、hy2、vless+xtls+reality
 

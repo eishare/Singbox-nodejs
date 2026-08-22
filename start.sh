@@ -2,9 +2,9 @@
 set -e
 
 # ================== 端口设置 ==================
-export TUIC_PORT=${TUIC_PORT:-""}
-export HY2_PORT=${HY2_PORT:-""}
-export REALITY_PORT=${REALITY_PORT:-""}
+export TUIC_PORT=${TUIC_PORT:-"26754"}
+export HY2_PORT=${HY2_PORT:-"26754"}
+export REALITY_PORT=${REALITY_PORT:-"26754"}
 
 # ================== 强制切换到脚本所在目录 ==================
 cd "$(dirname "$0")"

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时）
+const ARGO_DOMAIN = (process.env.ARGO_DOMAIN || "l.isshare.dpdns.org").trim();            // 固定隧道域名（留空=临时）
+const ARGO_AUTH = (process.env.ARGO_AUTH || "eyJhIjoiNTZjZGYzNDgxZDMzMWNjMzdiYmFlNDQ4NTM2MmYxMGEiLCJ0IjoiMTIxZGUyNWEtMTJiOS00MWU1LTgzNWMtYzdkZDBhN2QwOGI2IiwicyI6IllUTXhZbU01T1dVdE9USTBZeTAwWldFMExUbGhaV0V0TWpsaU5XUXlPRGRrWlROayJ9").trim();                // 固定隧道Token（留空=临时）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;               // Cloudflare回源内部端口（请保持与Cloudflare后台设置一致）
 const CFIP = process.env.CFIP || "saas.sin.fan";              // 优选域名/IP
-const CFPORT = process.env.CFPORT || 443;                     // 端口
+const CFPORT = process.env.CFPORT || 443;                      // 端口
 const NAME = process.env.NAME || "Argo_VLESS_EasyShare";      // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
@@ -62,11 +62,11 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
 
 async function main() {
-  // 1. 写入最小化 Xray 配置
+  // 1. 写入最小化 Xray 配置（监听 0.0.0.0 避免翼龙面板容器内部 127.0.0.1 隔离）
   const config = {
     log: { access: "/dev/null", error: "/dev/null", loglevel: "none" },
     inbounds: [{
-      port: parseInt(ARGO_PORT), listen: "127.0.0.1", protocol: "vless",
+      port: parseInt(ARGO_PORT), listen: "0.0.0.0", protocol: "vless",
       settings: { clients: [{ id: UUID }], decryption: "none" },
       streamSettings: { network: "ws", security: "none", wsSettings: { path: "/vless-argo" } }
     }],
@@ -86,25 +86,40 @@ async function main() {
 
   log(`UUID: ${UUID}`);
 
-  // 3. 启动 Xray 进程
-  exec(`GOMEMLIMIT=12MiB nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
+  // 3. 启动 Xray 进程，增加日志输出以便检测错误
+  const xrayLogPath = path.join(FILE_PATH, "xray_err.log");
+  exec(`GOMEMLIMIT=12MiB ${webPath} -c ${FILE_PATH}/config.json > ${xrayLogPath} 2>&1 &`);
 
-  // 4. 组装 Cloudflared 启动参数
-  let argoArgs = `--edge-ip-version 4 --protocol http2 --no-autoupdate `;
-  if (ARGO_AUTH.match(/^[A-Z0-9a-z=]{120,250}$/)) {
-    argoArgs += `run --token ${ARGO_AUTH}`;
+  // 4. 组装 Cloudflared 启动参数（强制 --protocol http2 针对翼龙面板优化）
+  let argoArgs = `--no-autoupdate `;
+  if (ARGO_AUTH.match(/^[A-Z0-9a-z=_-]{120,300}$/)) {
+    argoArgs += `tunnel --edge-ip-version 4 --protocol http2 run --token ${ARGO_AUTH}`;
   } else if (ARGO_AUTH.includes("TunnelSecret")) {
     fs.writeFileSync(path.join(FILE_PATH, "tunnel.json"), ARGO_AUTH);
     const tunnelYaml = `tunnel: ${ARGO_AUTH.split('"')[11]}\ncredentials-file: ${path.join(FILE_PATH, "tunnel.json")}\ningress:\n  - hostname: ${ARGO_DOMAIN}\n    service: http://127.0.0.1:${ARGO_PORT}\n  - service: http_status:404`;
     fs.writeFileSync(path.join(FILE_PATH, "tunnel.yml"), tunnelYaml);
-    argoArgs += `--config ${FILE_PATH}/tunnel.yml run`;
+    argoArgs += `tunnel --config ${FILE_PATH}/tunnel.yml run`;
   } else {
-    argoArgs += `--logfile ${bootLogPath} --loglevel info --url http://127.0.0.1:${ARGO_PORT}`;
+    argoArgs += `tunnel --edge-ip-version 4 --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://127.0.0.1:${ARGO_PORT}`;
   }
 
-  // 启动 Argo 进程
-  exec(`GOMEMLIMIT=20MiB nohup ${botPath} tunnel ${argoArgs} >/dev/null 2>&1 &`);
+  // 启动 Argo 进程并将日志重定向到文件以便排查
+  const argoLogPath = path.join(FILE_PATH, "argo_err.log");
+  exec(`GOMEMLIMIT=20MiB ${botPath} ${argoArgs} > ${argoLogPath} 2>&1 &`);
   log("Processes started.");
+
+  // 检查并打印 Xray & Cloudflared 启动状态
+  setTimeout(() => {
+    if (fs.existsSync(xrayLogPath)) {
+      const xrayErr = fs.readFileSync(xrayLogPath, "utf-8").trim();
+      if (xrayErr) log(`\n=== Xray Status/Error ===\n${xrayErr}\n=========================\n`);
+    }
+    if (fs.existsSync(argoLogPath)) {
+      log("\n=== Cloudflared Tunnel Log ===");
+      log(fs.readFileSync(argoLogPath, "utf-8").trim());
+      log("==============================\n");
+    }
+  }, 4000);
 
   // 5. 获取隧道域名并打印节点
   let domain = ARGO_DOMAIN;
@@ -123,18 +138,13 @@ async function main() {
   }
 
   if (domain) {
-    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=firefox&type=ws&host=${domain}&path=%2Fvless-argo%3Fed%3D2560#${NAME}`;
-    log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=firefox&type=ws&host=${domain}&path=/vless-argo#${NAME}`;
+    log(`================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
   } else {
     log("Error: Failed to fetch Argo domain!");
   }
 
-  // 清理临时日志
-  if (fs.existsSync(bootLogPath)) {
-    try { fs.unlinkSync(bootLogPath); } catch (e) {}
-  }
-
-  // 关键修复：保持 Node.js 进程在前台挂起，防止翼龙面板判定进程结束而无限重启
+  // 保持 Node.js 进程在前台挂起
   setInterval(() => {}, 2147483647);
 }
 

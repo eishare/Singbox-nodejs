@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 
+// 1. 配置项与环境变量
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";   // 固定隧道完整域名（不包含：cloudflared.exe service install ）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";       // 固定隧道Token（），留空使用临时隧道
+const ARGO_PORT = process.env.ARGO_PORT || 8001;     // Cloudflare回源端口（临时隧道不修改）
+const CFIP = process.env.CFIP || "saas.sin.fan";     // 优选 IP/域名
+const CFPORT = process.env.CFPORT || 443;            // 优选端口，默认无需修改
+
+const FILE_PATH = process.env.FILE_PATH || ".tmp";
+const SUB_PATH = process.env.SUB_PATH || "sub";
+const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;
+
+// 2. 引入标准内置模块
 const http = require("http");
 const https = require("https");
 const os = require("os");
@@ -10,37 +22,21 @@ const { URL } = require("url");
 const { promisify } = require("util");
 const exec = promisify(require("child_process").exec);
 
-// 【内存极致压缩】限制 Go 运行时内存归还策略与软限制
+// 3. Go 内存与并发限制（极致压制内存占用）
 process.env.GODEBUG = "madvdontneed=1";
 process.env.GOMAXPROCS = "1";
 
-const UPLOAD_URL = process.env.UPLOAD_URL || "";
-const PROJECT_URL = process.env.PROJECT_URL || "";
-const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
-const FILE_PATH = process.env.FILE_PATH || ".tmp";
-const SUB_PATH = process.env.SUB_PATH || "sub";
-const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;
-
-// 优先读取环境变量 UUID，若无则自动随机生成 v4 UUID
+// 优先读取环境变量 UUID，若无则自动生成
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
   const r = (Math.random() * 16) | 0;
   return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
 }));
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";
-const ARGO_AUTH = process.env.ARGO_AUTH || "";
-const ARGO_PORT = process.env.ARGO_PORT || 8001; // Xray 监听端口
-const CFIP = process.env.CFIP || "saas.sin.fan"; // 优选 IP/域名
-const CFPORT = process.env.CFPORT || 443;        // 优选端口
-const NAME = process.env.NAME || "";
-const CHAT_ID = process.env.CHAT_ID || "";
-const BOT_TOKEN = process.env.BOT_TOKEN || "";
-
 function alwaysLog(msg) {
   process.stdout.write(msg + "\n");
 }
 
-function request(urlStr, options = {}, body = null) {
+function request(urlStr, options = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(urlStr);
     const client = u.protocol === "https:" ? https : http;
@@ -64,8 +60,6 @@ function request(urlStr, options = {}, body = null) {
 
     req.on("error", (err) => reject(err));
     req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
-
-    if (body) req.write(typeof body === "object" ? JSON.stringify(body) : body);
     req.end();
   });
 }
@@ -110,7 +104,6 @@ if (!fs.existsSync(FILE_PATH)) {
   fs.mkdirSync(FILE_PATH, { recursive: true });
 }
 
-// 纯粹的 VLESS over WS 配置（静音所有日志，完全不占用存储）
 function generateConfig() {
   const config = {
     log: { access: "/dev/null", error: "/dev/null", loglevel: "none" },
@@ -147,11 +140,9 @@ async function downloadFilesAndRun() {
 
   alwaysLog(`UUID: ${UUID}`);
 
-  // 启动代理核心（注入 GOMEMLIMIT=15MiB，压低内存占用）
   exec(`GOMEMLIMIT=15MiB nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`);
   alwaysLog(`${webName} (Xray-VLESS) running...`);
 
-  // 启动 Cloudflared（注入 GOMEMLIMIT=25MiB，压低内存占用）
   let argoArgs;
   if (ARGO_AUTH.match(/^[A-Z0-9a-z=]{120,250}$/)) {
     argoArgs = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token ${ARGO_AUTH}`;
@@ -217,13 +208,10 @@ async function extractDomainsAndGenerate() {
   }
 
   alwaysLog(`Argo Domain: ${domain}`);
-  const ISP = await getMetaInfo();
-  const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
+  const nodeName = await getMetaInfo();
 
-  // 生成极简 VLESS 节点链接
   plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=firefox&type=ws&host=${domain}&path=%2Fvless-argo%3Fed%3D2560#${nodeName}`;
 
-  // 结尾控制台直接输出
   alwaysLog(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
 
   const base64Sub = Buffer.from(plainNodeLink).toString("base64");
@@ -231,39 +219,9 @@ async function extractDomainsAndGenerate() {
   fs.writeFileSync(listPath, plainNodeLink, "utf8");
   subContent = base64Sub;
 
-  await uploadNodes();
-  await sendTelegram(base64Sub);
-
-  // 【硬盘防涨】提取完域名后立即删掉临时 boot.log
   if (fs.existsSync(bootLogPath)) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
-}
-
-async function uploadNodes() {
-  if (UPLOAD_URL && PROJECT_URL) {
-    await request(`${UPLOAD_URL}/api/add-subscriptions`, { method: "POST", headers: { "Content-Type": "application/json" } }, { subscription: [`${PROJECT_URL}/${SUB_PATH}`] }).catch(() => {});
-  } else if (UPLOAD_URL && fs.existsSync(listPath)) {
-    const content = fs.readFileSync(listPath, "utf-8");
-    const nodes = content.split("\n").filter((line) => line.startsWith("vless://"));
-    if (nodes.length > 0) {
-      await request(`${UPLOAD_URL}/api/add-nodes`, { method: "POST", headers: { "Content-Type": "application/json" } }, { nodes }).catch(() => {});
-    }
-  }
-}
-
-async function sendTelegram(message) {
-  if (!BOT_TOKEN || !CHAT_ID) return;
-  try {
-    const escapedName = NAME.replace(/[_*\[\]()~`>#+=|{}.!-]/g, "\\$&");
-    const text = `**${escapedName} VLESS节点推送**\n\`\`\`${message}\`\`\``;
-    await request(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" } }, { chat_id: CHAT_ID, text, parse_mode: "MarkdownV2" });
-  } catch (e) {}
-}
-
-async function addVisitTask() {
-  if (!AUTO_ACCESS || !PROJECT_URL) return;
-  await request("https://oooo.serv00.net/add-url", { method: "POST", headers: { "Content-Type": "application/json" } }, { url: PROJECT_URL }).catch(() => {});
 }
 
 async function startServer() {
@@ -271,7 +229,6 @@ async function startServer() {
   generateConfig();
   await downloadFilesAndRun();
   await extractDomainsAndGenerate();
-  await addVisitTask();
 }
 
 startServer().catch((err) => console.error("Start Error:", err));

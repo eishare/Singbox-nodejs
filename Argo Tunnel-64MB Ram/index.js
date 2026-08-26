@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道 Token（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare 回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
@@ -18,6 +18,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
+// 限制 Go 运行时内存与线程，开启高效 GC
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
 process.env.GOGC = "20";
 process.env.GOMAXPROCS = "1";
@@ -131,12 +132,10 @@ async function main() {
   fs.chmodSync(webPath, 0o775);
   fs.chmodSync(botPath, 0o775);
 
-  log(`UUID: ${UUID}`);
-
   log("Starting sing-box...");
   const webProc = spawn(webPath, ["run", "-c", configPath], {
     env: Object.assign({}, process.env, { GOMEMLIMIT: "4MiB" }),
-    stdio: "inherit"
+    stdio: "ignore"
   });
 
   await new Promise((r) => setTimeout(r, 1500));
@@ -168,9 +167,7 @@ ingress:
 
       fs.writeFileSync(path.join(FILE_PATH, "tunnel.yml"), tunnelYaml);
       argoArgs.push("--config", path.join(FILE_PATH, "tunnel.yml"), "run");
-    } catch (err) {
-      log(`Error parsing ARGO_AUTH JSON: ${err.message}`);
-    }
+    } catch (err) {}
   } else if (authTrim.length > 30) {
     argoArgs.push("run", "--url", `http://127.0.0.1:${ARGO_PORT}`, "--token", authTrim);
   } else {
@@ -180,17 +177,12 @@ ingress:
   log("Starting Cloudflared...");
   const botProc = spawn(botPath, argoArgs, {
     env: Object.assign({}, process.env, { GOMEMLIMIT: "8MiB" }),
-    stdio: "inherit"
+    stdio: "ignore"
   });
-
-  webProc.on("error", (err) => log(`sing-box Launch Error: ${err.message}`));
-  botProc.on("error", (err) => log(`Cloudflared Launch Error: ${err.message}`));
-
-  webProc.on("exit", (code, signal) => log(`sing-box stopped (code: ${code}, signal: ${signal})`));
-  botProc.on("exit", (code, signal) => log(`Cloudflared stopped (code: ${code}, signal: ${signal})`));
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
+    log("Fetching Argo Domain...");
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (fs.existsSync(bootLogPath)) {
@@ -226,7 +218,6 @@ ingress:
   process.stdin.resume();
 }
 
-main().catch((err) => {
-  console.error("Fatal Main Error:", err);
+main().catch(() => {
   process.exit(1);
 });

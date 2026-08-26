@@ -6,7 +6,7 @@ const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Tok
 const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "saas.sin.fan";              // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
-const NAME = process.env.NAME || "Argo_VLESS_EasyShare";      // 节点名称
+const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 

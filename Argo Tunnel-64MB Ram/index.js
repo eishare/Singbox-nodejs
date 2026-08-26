@@ -28,6 +28,8 @@ const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxx
   return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
 }));
 
+const log = (msg) => process.stdout.write(msg + "\n");
+
 function downloadFile(urlStr, targetPath) {
   return new Promise((resolve, reject) => {
     const client = urlStr.startsWith("https") ? https : http;
@@ -87,6 +89,7 @@ async function main() {
     execSync(`pkill -9 -f ${botPath} || true`);
   } catch (e) {}
 
+  // 核心修复点：剔除 early_data_header_name 强限制，完全对齐 Xray 纯净 WS 监听
   const config = {
     log: { level: "panic" },
     inbounds: [{
@@ -115,6 +118,7 @@ async function main() {
     : `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz`;
 
   if (!fs.existsSync(webPath)) {
+    log("Downloading sing-box...");
     const tempTar = path.join(FILE_PATH, "singbox.tar.gz");
     await downloadFile(singboxTarUrl, tempTar);
     extractSingbox(tempTar, webPath);
@@ -122,19 +126,24 @@ async function main() {
   }
 
   if (!fs.existsSync(botPath)) {
+    log("Downloading Cloudflared...");
     await downloadFile(cloudflaredUrl, botPath);
   }
 
   fs.chmodSync(webPath, 0o775);
   fs.chmodSync(botPath, 0o775);
 
+  log(`UUID: ${UUID}`);
+
+  log("Starting sing-box...");
   const webProc = spawn(webPath, ["run", "-c", configPath], {
     env: Object.assign({}, process.env, { GOMEMLIMIT: "4MiB" }),
-    stdio: "ignore"
+    stdio: "inherit"
   });
 
   await new Promise((r) => setTimeout(r, 1500));
 
+  // 1:1 还原 Xray 版完全一致的 argoArgs
   let argoArgs = [
     "tunnel",
     "--edge-ip-version", "4",
@@ -162,17 +171,26 @@ ingress:
 
       fs.writeFileSync(path.join(FILE_PATH, "tunnel.yml"), tunnelYaml);
       argoArgs.push("--config", path.join(FILE_PATH, "tunnel.yml"), "run");
-    } catch (err) {}
+    } catch (err) {
+      log(`Error parsing ARGO_AUTH JSON: ${err.message}`);
+    }
   } else if (authTrim.length > 30) {
     argoArgs.push("run", "--url", `http://127.0.0.1:${ARGO_PORT}`, "--token", authTrim);
   } else {
     argoArgs.push("--logfile", bootLogPath, "--loglevel", "info", "--url", `http://127.0.0.1:${ARGO_PORT}`);
   }
 
+  log("Starting Cloudflared...");
   const botProc = spawn(botPath, argoArgs, {
     env: Object.assign({}, process.env, { GOMEMLIMIT: "8MiB" }),
-    stdio: "ignore"
+    stdio: "inherit"
   });
+
+  webProc.on("error", (err) => log(`sing-box Launch Error: ${err.message}`));
+  botProc.on("error", (err) => log(`Cloudflared Launch Error: ${err.message}`));
+
+  webProc.on("exit", (code, signal) => log(`sing-box stopped (code: ${code}, signal: ${signal})`));
+  botProc.on("exit", (code, signal) => log(`Cloudflared stopped (code: ${code}, signal: ${signal})`));
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
@@ -189,10 +207,11 @@ ingress:
     }
   }
 
-  // 恢复唯一需要的控制台输出：节点链接
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
-    console.log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+    log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+  } else {
+    log("Error: Failed to fetch Argo domain!");
   }
 
   if (fs.existsSync(bootLogPath)) {
@@ -210,6 +229,7 @@ ingress:
   process.stdin.resume();
 }
 
-main().catch(() => {
+main().catch((err) => {
+  console.error("Fatal Main Error:", err);
   process.exit(1);
 });

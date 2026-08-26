@@ -1,4 +1,4 @@
-##!/bin/bash
+#!/bin/bash
 set -e
 
 # ================== 端口设置 ==================
@@ -33,15 +33,22 @@ fi
 # ================== 创建目录 ==================
 [ ! -d "${FILE_PATH}" ] && mkdir -p "${FILE_PATH}"
 
-# ================== 架构检测 & 下载 sing-box ==================
+# ================== 动态获取最新版本 & 下载 sing-box ==================
+# 自动通过 API 获取最新的 release 版本号（剥离 v 前缀），若 API 受限则以 1.11.4 保底
+SINGBOX_VER=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
+if [ -z "$SINGBOX_VER" ]; then
+  SINGBOX_VER="1.11.4"
+fi
+
 ARCH=$(uname -m)
-BASE_URL=""
+DOWNLOAD_URL=""
+
 if [[ "$ARCH" == "arm"* ]] || [[ "$ARCH" == "aarch64" ]]; then
-  BASE_URL="https://arm64.ssss.nyc.mn"
+  DOWNLOAD_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-arm64.tar.gz"
 elif [[ "$ARCH" == "amd64"* ]] || [[ "$ARCH" == "x86_64" ]]; then
-  BASE_URL="https://amd64.ssss.nyc.mn"
+  DOWNLOAD_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
 elif [[ "$ARCH" == "s390x" ]]; then
-  BASE_URL="https://s390x.ssss.nyc.mn"
+  DOWNLOAD_URL="https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-s390x.tar.gz"
 else
   echo "不支持的架构: $ARCH"
   exit 1
@@ -63,8 +70,12 @@ download_file() {
 # 优化：采用固定的文件名 sb_core，避免每次重启都生成随机名文件导致重复占用磁盘
 SINGBOX_BIN="${FILE_PATH}/sb_core"
 if [ ! -f "$SINGBOX_BIN" ]; then
-  echo -e "\e[1;33m[下载] 未检测到 Sing-box 核心，开始下载...\e[0m"
-  download_file "${BASE_URL}/sb" "$SINGBOX_BIN"
+  echo -e "\e[1;33m[下载] 未检测到 Sing-box 核心，正在下载最新版本 v${SINGBOX_VER}...\e[0m"
+  download_file "$DOWNLOAD_URL" "${FILE_PATH}/singbox.tar.gz"
+  tar -zxvf "${FILE_PATH}/singbox.tar.gz" -C "${FILE_PATH}" --strip-components=1 "sing-box-${SINGBOX_VER}-linux-"*/sing-box >/dev/null 2>&1 || \
+  tar -zxvf "${FILE_PATH}/singbox.tar.gz" -C "${FILE_PATH}" --wildcards "*/sing-box" --strip-components=1 >/dev/null 2>&1
+  mv "${FILE_PATH}/sing-box" "$SINGBOX_BIN" 2>/dev/null || true
+  rm -f "${FILE_PATH}/singbox.tar.gz"
   chmod +x "$SINGBOX_BIN"
 else
   echo -e "\e[1;32m[核心] 已存在 Sing-box 核心，跳过下载\e[0m"
@@ -196,7 +207,7 @@ schedule_restart() {
 
       kill "$SINGBOX_PID" 2>/dev/null || true
       sleep 3
-      
+
       rm -rf ~/.npm/_logs/* ./npm-debug.log* "${DATA_PATH}"/* /tmp/.singbox_* 2>/dev/null || true
 
       "$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" &

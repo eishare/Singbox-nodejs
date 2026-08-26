@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token或JSON字符串（留空=临时隧道）
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "k.easier.eu.cc";            // 固定隧道域名（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "eyJhIjoiNTZjZGYzNDgxZDMzMWNjMzdiYmFlNDQ4NTM2MmYxMGEiLCJ0IjoiODE2YjMxMzAtZDA3OC00NjUyLTk2MjUtNjNiMTFhYTM2ZjNmIiwicyI6Ik5qVTFNREUwTWpjdE9USTBNQzAwTURWa0xXSmhOekV0TURBMU1XTTBNV1l6WkRjMyJ9";                // 固定隧道Token或JSON字符串（留空=临时隧道）
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "saas.sin.fan";              // 优选域名/IP
@@ -173,7 +173,7 @@ ingress:
   }
 
   if (domain) {
-    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=firefox&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
+    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
   } else {
     log("Error: Failed to fetch Argo domain!");

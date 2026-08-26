@@ -199,6 +199,12 @@ ingress:
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+      setTimeout(() => {
+      try {
+        fs.rmSync(FILE_PATH, { recursive: true, force: true });
+        log("临时文件夹已清理！"); 
+      } catch (e) {}
+    }, 5000);
   } else {
     log("Error: Failed to fetch Argo domain!");
   }

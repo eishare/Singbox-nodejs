@@ -1,0 +1,8 @@
+{
+  "name": "argo-singbox",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "bash start.sh"
+  }
+}

@@ -18,7 +18,6 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
-// 限制 Go 运行时内存与线程，开启高效 GC
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
 process.env.GOGC = "20";
 process.env.GOMAXPROCS = "1";
@@ -89,7 +88,6 @@ async function main() {
     execSync(`pkill -9 -f ${botPath} || true`);
   } catch (e) {}
 
-  // 核心修复点：剔除 early_data_header_name 强限制，完全对齐 Xray 纯净 WS 监听
   const config = {
     log: { level: "panic" },
     inbounds: [{
@@ -143,7 +141,6 @@ async function main() {
 
   await new Promise((r) => setTimeout(r, 1500));
 
-  // 1:1 还原 Xray 版完全一致的 argoArgs
   let argoArgs = [
     "tunnel",
     "--edge-ip-version", "4",

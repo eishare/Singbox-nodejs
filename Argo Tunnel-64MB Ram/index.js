@@ -18,9 +18,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
-// 限制 Go 运行时内存与线程，开启高效 GC
+// 限制 Go 运行时内存与线程，超激进 GC 配置
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
-process.env.GOGC = "20";
+process.env.GOGC = "10";
 process.env.GOMAXPROCS = "1";
 
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -30,6 +30,7 @@ const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxx
 
 const log = (msg) => process.stdout.write(msg + "\n");
 
+// 低内存占用流式下载
 function downloadFile(urlStr, targetPath) {
   return new Promise((resolve, reject) => {
     const client = urlStr.startsWith("https") ? https : http;
@@ -42,7 +43,8 @@ function downloadFile(urlStr, targetPath) {
         req.destroy();
         return reject(new Error(`HTTP Status ${res.statusCode}`));
       }
-      const file = fs.createWriteStream(targetPath);
+      // 使用 16KB 超小缓冲区，防止下载时挤爆 RAM 触发 OOM
+      const file = fs.createWriteStream(targetPath, { highWaterMark: 1024 * 16 });
       res.pipe(file);
       file.on("finish", () => {
         file.close(() => {
@@ -79,11 +81,7 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
-  try {
-    if (fs.existsSync("web")) fs.unlinkSync("web");
-    if (fs.existsSync("bot")) fs.unlinkSync("bot");
-  } catch (e) {}
-
+  // 清理残留
   try {
     execSync(`pkill -9 -f ${webPath} || true`);
     execSync(`pkill -9 -f ${botPath} || true`);
@@ -116,6 +114,7 @@ async function main() {
     ? `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-arm64.tar.gz`
     : `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz`;
 
+  // Step 1: 串行下载 sing-box，解压后立即删压缩包
   if (!fs.existsSync(webPath)) {
     log("Downloading sing-box...");
     const tempTar = path.join(FILE_PATH, "singbox.tar.gz");
@@ -124,6 +123,7 @@ async function main() {
     try { fs.unlinkSync(tempTar); } catch (e) {}
   }
 
+  // Step 2: 下载 Cloudflared
   if (!fs.existsSync(botPath)) {
     log("Downloading Cloudflared...");
     await downloadFile(cloudflaredUrl, botPath);
@@ -133,8 +133,8 @@ async function main() {
   fs.chmodSync(botPath, 0o775);
 
   log("Starting sing-box...");
-  const webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, process.env, { GOMEMLIMIT: "4MiB" }),
+  let webProc = spawn(webPath, ["run", "-c", configPath], {
+    env: Object.assign({}, process.env, { GOMEMLIMIT: "8MiB" }),
     stdio: "ignore"
   });
 
@@ -175,11 +175,12 @@ ingress:
   }
 
   log("Starting Cloudflared...");
-  const botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, process.env, { GOMEMLIMIT: "8MiB" }),
+  let botProc = spawn(botPath, argoArgs, {
+    env: Object.assign({}, process.env, { GOMEMLIMIT: "10MiB" }),
     stdio: "ignore"
   });
 
+  // 获取临时域名
   let domain = ARGO_DOMAIN;
   if (!domain) {
     log("Fetching Argo Domain...");
@@ -199,19 +200,18 @@ ingress:
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
-      setTimeout(() => {
-      try {
-        fs.rmSync(FILE_PATH, { recursive: true, force: true });
-        log("临时文件夹已清理！"); 
-      } catch (e) {}
-    }, 5000);
   } else {
     log("Error: Failed to fetch Argo domain!");
   }
 
-  if (fs.existsSync(bootLogPath)) {
-    try { fs.unlinkSync(bootLogPath); } catch (e) {}
-  }
+  setTimeout(() => {
+    try {
+      if (fs.existsSync(webPath)) fs.unlinkSync(webPath);
+      if (fs.existsSync(botPath)) fs.unlinkSync(botPath);
+      if (fs.existsSync(bootLogPath)) fs.unlinkSync(bootLogPath);
+      log("二进制文件已清除，磁盘空间已释放！");
+    } catch (e) {}
+  }, 3000);
 
   const cleanup = () => {
     try { webProc.kill("SIGKILL"); } catch (e) {}

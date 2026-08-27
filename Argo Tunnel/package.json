@@ -1,1 +1,13 @@
-
+{
+  "name": "argo-easyshare",
+  "version": "1.0.0",
+  "description": "Argo VLESS Node Deployer",
+  "main": "index.js",
+  "scripts": {
+    "start": "bash start.sh"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "private": true
+}

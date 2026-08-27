@@ -3,7 +3,7 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare 回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
@@ -171,6 +171,7 @@ ingress:
   } else if (authTrim.length > 30) {
     argoArgs.push("run", "--url", `http://127.0.0.1:${ARGO_PORT}`, "--token", authTrim);
   } else {
+    // 临时隧道机制：将日志输出到 boot.log 供获取域名
     argoArgs.push("--logfile", bootLogPath, "--loglevel", "info", "--url", `http://127.0.0.1:${ARGO_PORT}`);
   }
 
@@ -182,14 +183,17 @@ ingress:
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
-    log("Fetching Argo Domain...");
-    for (let i = 0; i < 15; i++) {
+    log("Fetching Argo Temporary Domain...");
+    // 优化：延长获取等待时间（最多等待 60 秒，每 2 秒检测一次）
+    for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (fs.existsSync(bootLogPath)) {
         const logText = fs.readFileSync(bootLogPath, "utf-8");
-        const match = logText.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
+        // 增强正则匹配：适配更多可能的日志格式
+        const match = logText.match(/https?:\/\/([a-zA-Z0-9-]+\.trycloudflare\.com)/);
         if (match) {
           domain = match[1];
+          log(`Argo Domain fetched: ${domain}`);
           break;
         }
       }
@@ -199,16 +203,21 @@ ingress:
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     
+    // 控制台打印
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
 
+    // 写入文件
     try {
       fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
       log(`[Success] Node link saved to ${URL_FILE_PATH}`);
     } catch (e) {
       log(`[Error] Failed to write node link to file: ${e.message}`);
     }
+  } else {
+    log("[Warning] Failed to fetch Argo temporary domain, file sub.txt was not created.");
   }
 
+  // 清理临时生成的日志文件
   if (fs.existsSync(bootLogPath)) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }

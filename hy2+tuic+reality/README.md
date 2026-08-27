@@ -19,4 +19,4 @@
 ### 2.低配服务器使用说明
 （如freecloudpanel：64MB内存+64MB磁盘）：
 
-* 建议只部署tuic/hy2/vless其中1个节点
+* 建议只部署tuic/hy2/reality其中1个节点

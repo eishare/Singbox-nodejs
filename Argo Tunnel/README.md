@@ -1,5 +1,5 @@
 
-### 适配翼龙面板node.js环境，建议内存和磁盘不低于100MB
+### 1.适配翼龙面板node.js环境，建议内存和磁盘不低于100MB
   
 * Sing-box架构
 
@@ -7,13 +7,13 @@
 
 * 单节点 Vless ws tls
   
-### 临时隧道使用说明：
+### 2.临时隧道使用说明：
 
 1：start.sh+index.js+package.json上传至服务器文件夹，无需修改内容
 
 2：开机
 
-### 固定隧道使用说明：
+### 3.固定隧道使用说明：
 
 1：start.sh+index.js+package.json上传至服务器文件夹
 

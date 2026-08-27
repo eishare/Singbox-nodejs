@@ -199,10 +199,8 @@ ingress:
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     
-    // 控制台打日志
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
 
-    // [新增逻辑]：写入到文件
     try {
       fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
       log(`[Success] Node link saved to ${URL_FILE_PATH}`);

@@ -1,3 +1,31 @@
+### 适配翼龙面板node.js环境
+  
+* Sing-box架构
+
+* uuid自动生成
+
+* UDP+TCP组合
+  
+* 自动重启：每天凌晨00:03自动执行一次Sing-box重启，清除缓存
+  
+### 1.使用说明：
+
+* start.sh+index.js+package.json上传至服务器
+
+* 输入tuic/hy2/vless端口，保存
+
+* 开机
+
+### 2.固定隧道使用说明：
+
+1：start.sh+index.js+package.json上传至服务器文件夹
+
+2：添加固定隧道域名+Token
+
+3：开机
+
+
+
 ### 内存极限优化版-适配低内存/存储（如64MB内存+64磁盘）
     
 ### tuic+reality双节点，磁盘占用42.55MB，运行内存占用低于60MB

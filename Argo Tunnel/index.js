@@ -3,12 +3,13 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare 回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
+const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; // 保存节点链接的文件文件名
 
 const http = require("http");
 const https = require("https");
@@ -197,7 +198,17 @@ ingress:
 
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
+    
+    // 控制台打日志
     log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+
+    // [新增逻辑]：写入到文件
+    try {
+      fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
+      log(`[Success] Node link saved to ${URL_FILE_PATH}`);
+    } catch (e) {
+      log(`[Error] Failed to write node link to file: ${e.message}`);
+    }
   }
 
   if (fs.existsSync(bootLogPath)) {

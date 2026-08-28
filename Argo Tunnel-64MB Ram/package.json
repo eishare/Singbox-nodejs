@@ -1,8 +1,10 @@
 {
-  "name": "argo-singbox",
+  "name": "argo-easyshare",
   "version": "1.0.0",
+  "description": "Ultra low memory deployment for Sing-box & Cloudflared",
   "main": "index.js",
   "scripts": {
-    "start": "bash start.sh"
-  }
+    "start": "node --expose-gc --max-old-space-size=6 index.js"
+  },
+  "dependencies": {}
 }

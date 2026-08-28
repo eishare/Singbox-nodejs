@@ -1,5 +1,6 @@
-!(https://img.shields.io/badge/Argo内网穿透、直连UDP+TCP 部署方案说明-red?style=flat-square)
+![](https://img.shields.io/badge/Argo内网穿透、直连UDP+TCP 部署方案说明-red?style=flat-square)
 
+![警告](https://img.shields.io/badge/警告-这是一条醒目的红色提示信息-red?style=flat-square)
 ### 1.Argo Tunnel-64MB Ram
 
 * 极限精简+性能平衡版

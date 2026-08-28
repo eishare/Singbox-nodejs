@@ -1,9 +1,7 @@
 <p style="background-color: #ffeef0; color: #d73a49; padding: 10px; border-left: 4px solid #d73a49; border-radius: 4px;">
 <b>警告：</b> Argo内网穿透、直连UDP+TCP 部署方案说明
 </p>
-<p style="background-color: #ffeef0; color: #d73a49; padding: 10px; border-left: 4px solid #d73a49; border-radius: 4px;">
-<b>警告：</b> 这是一个红色的警告提示，没有任何复制按钮！
-</p>
+$\color{red}{\text{警告：这是一个真正的红色警告信息！}}$
 
 请注意：<span style="color: #d73a49; font-weight: bold;">这行文字中的重点部分是红色的</span>，并且没有复制按钮。
 

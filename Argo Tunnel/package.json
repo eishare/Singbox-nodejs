@@ -1,13 +1,12 @@
 {
-  "name": "argo-easyshare",
+  "name": "vless-argo-node",
   "version": "1.0.0",
-  "description": "Argo VLESS Node Deployer",
+  "description": "High performance VLESS Argo Node for 100MB+ RAM environments",
   "main": "index.js",
   "scripts": {
-    "start": "bash start.sh"
+    "start": "chmod +x start.sh && ./start.sh"
   },
   "engines": {
-    "node": ">=18.0.0"
-  },
-  "private": true
+    "node": ">=14.0.0"
+  }
 }

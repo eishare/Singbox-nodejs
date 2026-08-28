@@ -3,25 +3,13 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare 回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; // 保存节点链接的文件名
-
-
-if (!process.env.NODE_MAX_MEM_SET) {
-  const { spawn } = require("child_process");
-  const env = Object.assign({}, process.env, { NODE_MAX_MEM_SET: "true" });
-  const child = spawn(process.argv[0], ["--max-old-space-size=8", ...process.argv.slice(1)], {
-    env,
-    stdio: "inherit"
-  });
-  child.on("exit", (code) => process.exit(code || 0));
-  return;
-}
 
 const http = require("http");
 const https = require("https");
@@ -32,7 +20,7 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
-process.env.GOGC = "5"; 
+process.env.GOGC = "1";
 process.env.GOMAXPROCS = "1";
 
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -41,7 +29,6 @@ const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxx
 }));
 
 const log = (msg) => process.stdout.write(msg + "\n");
-
 
 function downloadFile(urlStr, targetPath) {
   return new Promise((resolve, reject) => {
@@ -55,8 +42,7 @@ function downloadFile(urlStr, targetPath) {
         req.destroy();
         return reject(new Error(`HTTP 状态码异常: ${res.statusCode}`));
       }
-    
-      const file = fs.createWriteStream(targetPath, { highWaterMark: 1024 * 8 });
+      const file = fs.createWriteStream(targetPath, { highWaterMark: 1024 * 4 });
       res.pipe(file);
       file.on("finish", () => {
         file.close(() => {
@@ -93,7 +79,7 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
-  // 清理残留进程
+  // 清理可能存在的残留子进程
   try {
     execSync(`pkill -9 -f ${webPath} || true`);
     execSync(`pkill -9 -f ${botPath} || true`);
@@ -126,18 +112,16 @@ async function main() {
     ? `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-arm64.tar.gz`
     : `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz`;
 
-
   if (!fs.existsSync(webPath)) {
-    log("正在下载 sing-box 核心...");
+    log("正在下载 sing-box...");
     const tempTar = path.join(FILE_PATH, "singbox.tar.gz");
     await downloadFile(singboxTarUrl, tempTar);
     extractSingbox(tempTar, webPath);
     try { fs.unlinkSync(tempTar); } catch (e) {}
   }
 
-  
   if (!fs.existsSync(botPath)) {
-    log("正在下载 Cloudflared 核心...");
+    log("正在下载 Cloudflared...");
     await downloadFile(cloudflaredUrl, botPath);
   }
 
@@ -145,10 +129,9 @@ async function main() {
   fs.chmodSync(botPath, 0o775);
 
   log("正在启动 sing-box 服务...");
-
   let webProc = spawn(webPath, ["run", "-c", configPath], {
     env: Object.assign({}, process.env, { 
-      GOMEMLIMIT: "4MiB",
+      GOMEMLIMIT: "2MiB",
       GODEBUG: "madvdontneed=1,cgocheck=0" 
     }),
     stdio: "ignore"
@@ -156,11 +139,10 @@ async function main() {
 
   await new Promise((r) => setTimeout(r, 1500));
 
-  
   let argoArgs = [
     "tunnel",
     "--edge-ip-version", "4",
-    "--protocol", "quic",
+    "--protocol", "http2",
     "--ha-connections", "1",
     "--no-autoupdate",
     "--retries", "3"
@@ -168,7 +150,6 @@ async function main() {
 
   const authTrim = ARGO_AUTH.trim();
 
-  
   if (authTrim.includes("TunnelSecret")) {
     try {
       const jsonAuth = JSON.parse(authTrim);
@@ -177,7 +158,7 @@ async function main() {
 
       const tunnelYaml = `tunnel: ${tunnelId}
 credentials-file: ${path.join(FILE_PATH, "tunnel.json")}
-protocol: quic
+protocol: http2
 ha-connections: 1
 heartbeat-interval: 45s
 keep-alive-timeout: 90s
@@ -192,7 +173,7 @@ ingress:
     } catch (err) {}
   } else if (authTrim.length > 30) {
     const tokenYaml = `token: ${authTrim}
-protocol: quic
+protocol: http2
 ha-connections: 1
 heartbeat-interval: 45s
 keep-alive-timeout: 90s
@@ -212,16 +193,14 @@ keep-alive-timeout: 90s`;
     argoArgs.push("--config", path.join(FILE_PATH, "temp_argo.yml"));
   }
 
-  log("正在启动 Cloudflared 隧道 (QUIC 模式)...");
-  
+  log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
     env: Object.assign({}, process.env, { 
-      GOMEMLIMIT: "6MiB",
+      GOMEMLIMIT: "4MiB",
       GODEBUG: "madvdontneed=1,cgocheck=0" 
     }),
     stdio: "ignore"
   });
-
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
@@ -241,7 +220,7 @@ keep-alive-timeout: 90s`;
 
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
-    log(`\n================== VLESS 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
+    log(`\n================== Argo Vless 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
     
     try {
       fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
@@ -253,22 +232,21 @@ keep-alive-timeout: 90s`;
     log("[错误！] 获取 Argo 临时域名失败！");
   }
 
- 
   setTimeout(() => {
     try {
       if (fs.existsSync(webPath)) fs.unlinkSync(webPath);
       if (fs.existsSync(botPath)) fs.unlinkSync(botPath);
       if (fs.existsSync(bootLogPath)) fs.unlinkSync(bootLogPath);
-      log("二进制文件与临时日志已清除，磁盘空间已释放！");
+      log("二进制安装包与临时日志已清理。");
     } catch (e) {}
-  }, 3000);
 
-  // 轻量级 Node.js 本地 HTTP 探针，4分钟唤醒一次
-  setInterval(() => {
-    http.get(`http://127.0.0.1:${ARGO_PORT}`, (res) => {
-      res.resume();
-    }).on("error", () => {});
-  }, 240000);
+    if (global.gc) {
+      try {
+        global.gc();
+        log("已执行 V8 手动 GC 内存回收。");
+      } catch (e) {}
+    }
+  }, 3000);
 
   const cleanup = () => {
     try { webProc.kill("SIGKILL"); } catch (e) {}

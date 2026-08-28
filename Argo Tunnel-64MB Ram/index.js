@@ -9,7 +9,7 @@ const CFPORT = process.env.CFPORT || 443;                     // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
-const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; // 保存节点链接的文件名
+const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
 
 const http = require("http");
 const https = require("https");
@@ -79,7 +79,7 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
-  // 清理可能存在的残留子进程
+ 
   try {
     execSync(`pkill -9 -f ${webPath} || true`);
     execSync(`pkill -9 -f ${botPath} || true`);

@@ -1,17 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 
-# 1. 设置工作目录环境变量
-export FILE_PATH=${FILE_PATH:-".tmp"}
-mkdir -p "$FILE_PATH"
+# 1. 允许 C 库分配适度内存池，匹配 100MB+ 容器的并发 IO
+export MALLOC_ARENA_MAX=2
 
-# 2. 优化运行环境，取消低内存限制以支持高性能模式
-unset GOMAXPROCS
-unset GOMEMLIMIT
-export GOGC=100
-
-# 3. 清理残留进程
-pkill -9 -f "$FILE_PATH/web" 2>/dev/null || true
-pkill -9 -f "$FILE_PATH/bot" 2>/dev/null || true
-
-# 4. 前台常驻启动 index.js
-exec node index.js
+# 2. 移除 --expose-gc 与 24MB 的极小堆限制
+# 为 Node.js 留出 48MB~64MB 堆内存上限，确保主进程稳定不频繁卡顿
+exec node --max-old-space-size=64 index.js

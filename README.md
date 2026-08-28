@@ -1,9 +1,4 @@
-<p style="background-color: #ffeef0; color: #d73a49; padding: 10px; border-left: 4px solid #d73a49; border-radius: 4px;">
-<b>警告：</b> Argo内网穿透、直连UDP+TCP 部署方案说明
-</p>
-$\color{red}{\text{警告：这是一个真正的红色警告信息！}}$
-
-![警告](https://img.shields.io/badge/警告-这是一条醒目的红色提示信息-red?style=flat-square)
+!(https://img.shields.io/badge/Argo内网穿透、直连UDP+TCP 部署方案说明-red?style=flat-square)
 
 ### 1.Argo Tunnel-64MB Ram
 

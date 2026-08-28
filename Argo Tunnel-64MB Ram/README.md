@@ -1,4 +1,4 @@
-### 适配翼龙面板node.js环境，，可运行于64MB内存+64MB磁盘（如freecloudpanel）
+### 适配翼龙面板node.js环境，可运行于64MB内存+64MB磁盘（如freecloudpanel）
   
 * Sing-box架构
 

@@ -3,13 +3,13 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare 回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
-const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; // 保存节点链接的文件文件名
+const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
 
 const http = require("http");
 const https = require("https");
@@ -20,8 +20,8 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
+process.env.GOGC = "100"; 
 delete process.env.GOMAXPROCS;
-process.env.GOGC = "100";
 
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
   const r = (Math.random() * 16) | 0;
@@ -40,7 +40,7 @@ function downloadFile(urlStr, targetPath) {
       }
       if (res.statusCode !== 200) {
         req.destroy();
-        return reject(new Error(`HTTP Status ${res.statusCode}`));
+        return reject(new Error(`HTTP 状态码异常: ${res.statusCode}`));
       }
       const file = fs.createWriteStream(targetPath);
       res.pipe(file);
@@ -68,7 +68,7 @@ function extractSingbox(tarPath, targetWebPath) {
       return;
     }
   } catch (e) {}
-  throw new Error("Failed to extract sing-box");
+  throw new Error("提取 sing-box 失败");
 }
 
 if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
@@ -79,11 +79,6 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
-  try {
-    if (fs.existsSync("web")) fs.unlinkSync("web");
-    if (fs.existsSync("bot")) fs.unlinkSync("bot");
-  } catch (e) {}
-
   try {
     execSync(`pkill -9 -f ${webPath} || true`);
     execSync(`pkill -9 -f ${botPath} || true`);
@@ -133,24 +128,30 @@ async function main() {
   fs.chmodSync(botPath, 0o775);
 
   log("正在启动 sing-box 服务...");
-  const webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: process.env,
+  let webProc = spawn(webPath, ["run", "-c", configPath], {
+    env: process.env, 
     stdio: "ignore"
   });
 
   await new Promise((r) => setTimeout(r, 1500));
 
-  let argoArgs = [
-    "tunnel",
-    "--edge-ip-version", "4",
-    "--protocol", "http2",
-    "--no-autoupdate",
-    "--retries", "3"
-  ];
-
   const authTrim = ARGO_AUTH.trim();
+  let argoArgs = [];
 
-  if (authTrim.includes("TunnelSecret")) {
+  if (authTrim.length > 30 && !authTrim.includes("TunnelSecret")) {
+    log("检测到 Token 模式，启动标准高吞吐 HTTP/2 隧道...");
+    argoArgs = [
+      "tunnel",
+      "--no-autoupdate",
+      "--edge-ip-version", "4",
+      "--protocol", "http2",
+      "--ha-connections", "2",
+      "run",
+      "--url", `http://127.0.0.1:${ARGO_PORT}`,
+      "--token", authTrim
+    ];
+  } else if (authTrim.includes("TunnelSecret")) {
+    log("检测到 TunnelSecret JSON 模式...");
     try {
       const jsonAuth = JSON.parse(authTrim);
       const tunnelId = jsonAuth.TunnelID || jsonAuth.tunnel;
@@ -159,8 +160,7 @@ async function main() {
       const tunnelYaml = `tunnel: ${tunnelId}
 credentials-file: ${path.join(FILE_PATH, "tunnel.json")}
 protocol: http2
-heartbeat-interval: 10s
-keep-alive-timeout: 30s
+ha-connections: 2
 
 ingress:
   - hostname: ${ARGO_DOMAIN}
@@ -168,24 +168,21 @@ ingress:
   - service: http_status:404`;
 
       fs.writeFileSync(path.join(FILE_PATH, "tunnel.yml"), tunnelYaml);
-      argoArgs.push("--config", path.join(FILE_PATH, "tunnel.yml"), "run");
+      argoArgs = ["tunnel", "--config", path.join(FILE_PATH, "tunnel.yml"), "run"];
     } catch (err) {}
-  } else if (authTrim.length > 30) {
-    argoArgs.push("run", "--url", `http://127.0.0.1:${ARGO_PORT}`, "--token", authTrim);
   } else {
-
+    log("未检测到变量，将启动临时隧道...");
     const tempYaml = `url: http://127.0.0.1:${ARGO_PORT}
 logfile: ${bootLogPath}
 loglevel: info
-heartbeat-interval: 10s
-keep-alive-timeout: 30s`;
+protocol: http2`;
     
     fs.writeFileSync(path.join(FILE_PATH, "temp_argo.yml"), tempYaml);
-    argoArgs.push("--config", path.join(FILE_PATH, "temp_argo.yml"));
+    argoArgs = ["tunnel", "--config", path.join(FILE_PATH, "temp_argo.yml")];
   }
 
   log("正在启动 Cloudflared 隧道...");
-  const botProc = spawn(botPath, argoArgs, {
+  let botProc = spawn(botPath, argoArgs, {
     env: process.env,
     stdio: "ignore"
   });
@@ -193,14 +190,13 @@ keep-alive-timeout: 30s`;
   let domain = ARGO_DOMAIN;
   if (!domain) {
     log("正在获取 Argo 临时域名...");
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (fs.existsSync(bootLogPath)) {
         const logText = fs.readFileSync(bootLogPath, "utf-8");
-        const match = logText.match(/https?:\/\/([a-zA-Z0-9-]+\.trycloudflare\.com)/);
+        const match = logText.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
         if (match) {
           domain = match[1];
-          log(`成功获取 Argo 临时域名: ${domain}`);
           break;
         }
       }
@@ -209,17 +205,16 @@ keep-alive-timeout: 30s`;
 
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
+    log(`\n================== Argo Vless 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
     
-    log(`\n================== Argo Vless 链接 ==================\n${plainNodeLink}\n=====================================================\n`);
-
     try {
       fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
       log(`[成功！] 节点链接已保存至 ${URL_FILE_PATH}`);
     } catch (e) {
-      log(`[错误！] 保存节点链接到文件失败: ${e.message}`);
+      log(`[错误！] 保存节点链接失败: ${e.message}`);
     }
   } else {
-    log("[警告！] 获取 Argo 临时域名失败，未生成 sub.txt 文件。");
+    log("[错误！] 获取 Argo 临时域名失败！");
   }
 
   if (fs.existsSync(bootLogPath)) {

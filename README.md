@@ -1,5 +1,5 @@
 ```diff
-- 3种部署方案说明
+Argo内网穿透、直连UDP+TCP 部署方案说明
 ```
 
 ### 1.Argo Tunnel-64MB Ram

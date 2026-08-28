@@ -1,4 +1,4 @@
-### 1.Argo Tunnel-64MB Ram：
+### 1.Argo Tunnel-64MB Ram
 
 * 极限精简+性能平衡版
 * 适合64MB内存+64MB磁盘部署（如freecloudpanel）

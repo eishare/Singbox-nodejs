@@ -1,6 +1,8 @@
-### 适配翼龙面板node.js环境，极限精简优化+性能平衡，可运行于64MB内存+64MB磁盘（如freecloudpanel）
+### 适配翼龙面板node.js环境，，可运行于64MB内存+64MB磁盘（如freecloudpanel）
   
 * Sing-box架构
+
+* 极限精简优化+性能平衡
 
 * uuid自动生成
 

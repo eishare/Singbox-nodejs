@@ -25,10 +25,10 @@
 ## 📌 环境要求与说明
 
 - **已测试平台**：
-                 Lunes Host
-                 Katabump
-                 Bot hosting（不支持argo）
-                 Freecloudpanel
+                 * Lunes Host
+                 * Katabump
+                 * Bot hosting（不支持argo）
+                 * Freecloudpanel
 ---
 
 ⚠️ **免责声明（Disclaimer）**

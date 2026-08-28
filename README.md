@@ -1,7 +1,6 @@
-```diff
--Argo内网穿透、直连UDP+TCP 部署方案说明
-```
-
+> [!CAUTION]
+> Argo内网穿透、直连UDP+TCP 部署方案说明
+> 
 ### 1.Argo Tunnel-64MB Ram
 
 * 极限精简+性能平衡版

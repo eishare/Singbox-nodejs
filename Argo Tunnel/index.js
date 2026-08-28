@@ -117,7 +117,7 @@ async function main() {
     : `https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz`;
 
   if (!fs.existsSync(webPath)) {
-    log("Downloading sing-box...");
+    log("正在下载 sing-box...");
     const tempTar = path.join(FILE_PATH, "singbox.tar.gz");
     await downloadFile(singboxTarUrl, tempTar);
     extractSingbox(tempTar, webPath);
@@ -125,14 +125,14 @@ async function main() {
   }
 
   if (!fs.existsSync(botPath)) {
-    log("Downloading Cloudflared...");
+    log("正在下载 Cloudflared...");
     await downloadFile(cloudflaredUrl, botPath);
   }
 
   fs.chmodSync(webPath, 0o775);
   fs.chmodSync(botPath, 0o775);
 
-  log("Starting sing-box...");
+  log("正在启动 sing-box 服务...");
   const webProc = spawn(webPath, ["run", "-c", configPath], {
     env: process.env,
     stdio: "ignore"
@@ -159,6 +159,8 @@ async function main() {
       const tunnelYaml = `tunnel: ${tunnelId}
 credentials-file: ${path.join(FILE_PATH, "tunnel.json")}
 protocol: http2
+heartbeat-interval: 10s
+keep-alive-timeout: 30s
 
 ingress:
   - hostname: ${ARGO_DOMAIN}
@@ -171,11 +173,18 @@ ingress:
   } else if (authTrim.length > 30) {
     argoArgs.push("run", "--url", `http://127.0.0.1:${ARGO_PORT}`, "--token", authTrim);
   } else {
-    // 临时隧道机制：将日志输出到 boot.log 供获取域名
-    argoArgs.push("--logfile", bootLogPath, "--loglevel", "info", "--url", `http://127.0.0.1:${ARGO_PORT}`);
+
+    const tempYaml = `url: http://127.0.0.1:${ARGO_PORT}
+logfile: ${bootLogPath}
+loglevel: info
+heartbeat-interval: 10s
+keep-alive-timeout: 30s`;
+    
+    fs.writeFileSync(path.join(FILE_PATH, "temp_argo.yml"), tempYaml);
+    argoArgs.push("--config", path.join(FILE_PATH, "temp_argo.yml"));
   }
 
-  log("Starting Cloudflared...");
+  log("正在启动 Cloudflared 隧道...");
   const botProc = spawn(botPath, argoArgs, {
     env: process.env,
     stdio: "ignore"
@@ -183,17 +192,15 @@ ingress:
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
-    log("Fetching Argo Temporary Domain...");
-    // 优化：延长获取等待时间（最多等待 60 秒，每 2 秒检测一次）
+    log("正在获取 Argo 临时域名...");
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (fs.existsSync(bootLogPath)) {
         const logText = fs.readFileSync(bootLogPath, "utf-8");
-        // 增强正则匹配：适配更多可能的日志格式
         const match = logText.match(/https?:\/\/([a-zA-Z0-9-]+\.trycloudflare\.com)/);
         if (match) {
           domain = match[1];
-          log(`Argo Domain fetched: ${domain}`);
+          log(`成功获取 Argo 临时域名: ${domain}`);
           break;
         }
       }
@@ -203,21 +210,18 @@ ingress:
   if (domain) {
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
     
-    // 控制台打印
-    log(`\n================== VLESS NODE LINK ==================\n${plainNodeLink}\n=====================================================\n`);
+    log(`\n================== Argo Vless 链接 ==================\n${plainNodeLink}\n=====================================================\n`);
 
-    // 写入文件
     try {
       fs.writeFileSync(URL_FILE_PATH, plainNodeLink, "utf-8");
-      log(`[Success] Node link saved to ${URL_FILE_PATH}`);
+      log(`[成功！] 节点链接已保存至 ${URL_FILE_PATH}`);
     } catch (e) {
-      log(`[Error] Failed to write node link to file: ${e.message}`);
+      log(`[错误！] 保存节点链接到文件失败: ${e.message}`);
     }
   } else {
-    log("[Warning] Failed to fetch Argo temporary domain, file sub.txt was not created.");
+    log("[警告！] 获取 Argo 临时域名失败，未生成 sub.txt 文件。");
   }
 
-  // 清理临时生成的日志文件
   if (fs.existsSync(bootLogPath)) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }

@@ -1,6 +1,7 @@
-```diff
-- Argo内网穿透、直连UDP+TCP 部署方案说明
-```
+<p style="background-color: #ffeef0; color: #d73a49; padding: 10px; border-left: 4px solid #d73a49; border-radius: 4px;">
+<b>警告：</b> Argo内网穿透、直连UDP+TCP 部署方案说明
+</p>
+
 ### 1.Argo Tunnel-64MB Ram
 
 * 极限精简+性能平衡版

@@ -3,7 +3,7 @@
 </p>
 $\color{red}{\text{警告：这是一个真正的红色警告信息！}}$
 
-请注意：<span style="color: #d73a49; font-weight: bold;">这行文字中的重点部分是红色的</span>，并且没有复制按钮。
+![警告](https://img.shields.io/badge/警告-这是一条醒目的红色提示信息-red?style=flat-square)
 
 ### 1.Argo Tunnel-64MB Ram
 

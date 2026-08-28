@@ -24,8 +24,10 @@
 
 ## 📌 环境要求与说明
 
-- **服务商选择**：请读者自行通过搜索引擎寻找符合需求的云服务商。
-
+- **已测试平台**：Lunes Host
+-                Katabump
+-                bot hosting（不支持argo）
+-                Freecloudpanel
 ---
 
 ⚠️ **免责声明（Disclaimer）**

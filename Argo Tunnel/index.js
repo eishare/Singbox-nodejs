@@ -6,7 +6,7 @@ const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Tok
 const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                     // 端口
-const NAME = process.env.NAME || "Argo_EasyShare";            // 节点名称
+const NAME = process.env.NAME || "Argo_EasyShare";           
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
-process.env.GOGC = "100"; 
+process.env.GOGC = "50"; 
 delete process.env.GOMAXPROCS;
 
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -129,7 +129,7 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: process.env, 
+    env: Object.assign({}, process.env, { GOMEMLIMIT: "30MiB" }),
     stdio: "ignore"
   });
 
@@ -171,7 +171,7 @@ ingress:
       argoArgs = ["tunnel", "--config", path.join(FILE_PATH, "tunnel.yml"), "run"];
     } catch (err) {}
   } else {
-    log("未检测到变量，将启动临时隧道...");
+    log("未检测到有效固定 Auth，启动临时隧道模式...");
     const tempYaml = `url: http://127.0.0.1:${ARGO_PORT}
 logfile: ${bootLogPath}
 loglevel: info
@@ -183,9 +183,12 @@ protocol: http2`;
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: process.env,
+    env: Object.assign({}, process.env, { GOMEMLIMIT: "45MiB" }),
     stdio: "ignore"
   });
+
+  webProc.on("exit", () => process.exit(1));
+  botProc.on("exit", () => process.exit(1));
 
   let domain = ARGO_DOMAIN;
   if (!domain) {

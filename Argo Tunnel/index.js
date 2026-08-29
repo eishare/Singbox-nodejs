@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";            // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                // 固定隧道Token（留空=临时隧道）
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                // 固定隧道域名（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";                    // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;              // Cloudflare回源端口
-const CFIP = process.env.CFIP || "www.visa.com.hk";           // 优选域名/IP
-const CFPORT = process.env.CFPORT || 443;                     // 端口
-const NAME = process.env.NAME || "Argo_EasyShare";           
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";       // 隧道协议默认 http2（TCP）更稳；quic（UDP）仅作测试用
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";     // Argo隧道连接数 默认4高性能，（1的占用最低，但抗抖动差)
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                  // Cloudflare回源端口
+const CFIP = process.env.CFIP || "www.visa.com.hk";               // 优选域名/IP
+const CFPORT = process.env.CFPORT || 443;                         // 端口
+const NAME = process.env.NAME || "Argo_EasyShare";            
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
@@ -27,6 +29,8 @@ const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxx
   const r = (Math.random() * 16) | 0;
   return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
 }));
+
+const WS_PATH = `/${UUID}-vless`;
 
 const log = (msg) => process.stdout.write(msg + "\n");
 
@@ -77,11 +81,14 @@ const webPath = path.join(FILE_PATH, "web");
 const botPath = path.join(FILE_PATH, "bot");
 const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
+const argoYamlPath = path.join(FILE_PATH, "argo.yml");
 
 async function main() {
   try {
-    execSync(`pkill -9 -f ${webPath} || true`);
-    execSync(`pkill -9 -f ${botPath} || true`);
+    if (process.platform !== "win32") {
+      execSync(`kill -9 $(pgrep -f ${webPath}) 2>/dev/null || true`);
+      execSync(`kill -9 $(pgrep -f ${botPath}) 2>/dev/null || true`);
+    }
   } catch (e) {}
 
   const config = {
@@ -94,7 +101,7 @@ async function main() {
       users: [{ uuid: UUID }],
       transport: {
         type: "ws",
-        path: "/vless-argo"
+        path: WS_PATH
       }
     }],
     outbounds: [{ type: "direct", tag: "direct" }]
@@ -136,49 +143,23 @@ async function main() {
   await new Promise((r) => setTimeout(r, 1500));
 
   const authTrim = ARGO_AUTH.trim();
-  let argoArgs = [];
-
-  if (authTrim.length > 30 && !authTrim.includes("TunnelSecret")) {
-    log("检测到 Token 模式，启动标准高吞吐 HTTP/2 隧道...");
-    argoArgs = [
-      "tunnel",
-      "--no-autoupdate",
-      "--edge-ip-version", "4",
-      "--protocol", "http2",
-      "--ha-connections", "2",
-      "run",
-      "--url", `http://127.0.0.1:${ARGO_PORT}`,
-      "--token", authTrim
-    ];
-  } else if (authTrim.includes("TunnelSecret")) {
-    log("检测到 TunnelSecret JSON 模式...");
-    try {
-      const jsonAuth = JSON.parse(authTrim);
-      const tunnelId = jsonAuth.TunnelID || jsonAuth.tunnel;
-      fs.writeFileSync(path.join(FILE_PATH, "tunnel.json"), JSON.stringify(jsonAuth));
-
-      const tunnelYaml = `tunnel: ${tunnelId}
-credentials-file: ${path.join(FILE_PATH, "tunnel.json")}
-protocol: http2
-ha-connections: 2
-
-ingress:
-  - hostname: ${ARGO_DOMAIN}
-    service: http://127.0.0.1:${ARGO_PORT}
-  - service: http_status:404`;
-
-      fs.writeFileSync(path.join(FILE_PATH, "tunnel.yml"), tunnelYaml);
-      argoArgs = ["tunnel", "--config", path.join(FILE_PATH, "tunnel.yml"), "run"];
-    } catch (err) {}
-  } else {
-    log("未检测到有效固定 Auth，启动临时隧道模式...");
-    const tempYaml = `url: http://127.0.0.1:${ARGO_PORT}
+  
+  const argoYamlContent = `url: http://127.0.0.1:${ARGO_PORT}
+protocol: ${ARGO_PROTOCOL.toLowerCase()}
+ha-connections: ${ARGO_CONNECTIONS}
 logfile: ${bootLogPath}
-loglevel: info
-protocol: http2`;
-    
-    fs.writeFileSync(path.join(FILE_PATH, "temp_argo.yml"), tempYaml);
-    argoArgs = ["tunnel", "--config", path.join(FILE_PATH, "temp_argo.yml")];
+loglevel: info`;
+
+  fs.writeFileSync(argoYamlPath, argoYamlContent, "utf-8");
+
+  let argoArgs = ["tunnel", "--no-autoupdate", "--config", argoYamlPath, "run"];
+
+  if (authTrim.length > 30) {
+    log(`检测到固定 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
+
+    argoArgs.push("--token", authTrim);
+  } else {
+    log(`未检测到有效固定 Auth Token，启动临时隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
   }
 
   log("正在启动 Cloudflared 隧道...");
@@ -207,7 +188,8 @@ protocol: http2`;
   }
 
   if (domain) {
-    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=%2Fvless-argo#${NAME}`;
+
+    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${WS_PATH}#${NAME}`;
     log(`\n================== Argo Vless 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
     
     try {

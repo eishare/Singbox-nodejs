@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                    // 固定隧道Token（留空=临时隧道）
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                           // 固定隧道域名（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";                               // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";       // 固定隧道协议默认 http2（TCP）更稳；quic具备UDP特性，但占用高，仅作测试用
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";     // 固定隧道连接数 默认4=高性能（1=占用最低，但抗抖动差)
-const ARGO_PORT = process.env.ARGO_PORT || 8001;                  // Cloudflare回源端口
-const CFIP = process.env.CFIP || "www.visa.com.hk";               // 优选域名/IP
-const CFPORT = process.env.CFPORT || 443;                         // 端口
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";                  // 固定隧道协议默认 http2（TCP）更稳；quic具备UDP特性，占用高
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";                // 固定隧道连接数 默认4=高性能（1=占用最低，抗抖动差)
+
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                             // Cloudflare回源URL端口
+const CFIP = process.env.CFIP || "www.visa.com.hk";                          // 优选域名/IP
+const CFPORT = process.env.CFPORT || 443;                                    // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";            
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
@@ -19,7 +20,7 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn, execSync } = require("child_process");
+const { spawn } = require("child_process");
 
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
 process.env.GOGC = "50"; 
@@ -31,7 +32,6 @@ const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxx
 }));
 
 const WS_PATH = `/${UUID}-vless`;
-
 const log = (msg) => process.stdout.write(msg + "\n");
 
 function downloadFile(urlStr, targetPath) {
@@ -65,6 +65,7 @@ function downloadFile(urlStr, targetPath) {
 
 function extractSingbox(tarPath, targetWebPath) {
   try {
+    const { execSync } = require("child_process");
     execSync(`tar -xzf "${tarPath}" -C "${FILE_PATH}" --wildcards "*/sing-box" --strip-components=1 || tar -xzf "${tarPath}" -C "${FILE_PATH}" sing-box`);
     const extractedPath = path.join(FILE_PATH, "sing-box");
     if (fs.existsSync(extractedPath)) {
@@ -81,15 +82,11 @@ const webPath = path.join(FILE_PATH, "web");
 const botPath = path.join(FILE_PATH, "bot");
 const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
-const argoYamlPath = path.join(FILE_PATH, "argo.yml");
 
 async function main() {
-  try {
-    if (process.platform !== "win32") {
-      execSync(`kill -9 $(pgrep -f ${webPath}) 2>/dev/null || true`);
-      execSync(`kill -9 $(pgrep -f ${botPath}) 2>/dev/null || true`);
-    }
-  } catch (e) {}
+  if (fs.existsSync(bootLogPath)) {
+    try { fs.unlinkSync(bootLogPath); } catch (e) {}
+  }
 
   const config = {
     log: { level: "panic" },
@@ -144,22 +141,21 @@ async function main() {
 
   const authTrim = ARGO_AUTH.trim();
   
-  const argoYamlContent = `url: http://127.0.0.1:${ARGO_PORT}
-protocol: ${ARGO_PROTOCOL.toLowerCase()}
-ha-connections: ${ARGO_CONNECTIONS}
-logfile: ${bootLogPath}
-loglevel: info`;
-
-  fs.writeFileSync(argoYamlPath, argoYamlContent, "utf-8");
-
-  let argoArgs = ["tunnel", "--no-autoupdate", "--config", argoYamlPath, "run"];
+  let argoArgs = [
+    "tunnel",
+    "--no-autoupdate",
+    "--protocol", ARGO_PROTOCOL.toLowerCase(),
+    "--ha-connections", String(ARGO_CONNECTIONS),
+    "--logfile", bootLogPath,
+    "--loglevel", "info"
+  ];
 
   if (authTrim.length > 30) {
-    log(`检测到固定 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
-
-    argoArgs.push("--token", authTrim);
+    log(`检测到有效Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
+    argoArgs.push("run", "--token", authTrim, "--url", `http://127.0.0.1:${ARGO_PORT}`);
   } else {
-    log(`未检测到有效固定 Auth Token，启动临时隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
+    log(`未检测到有效Token，启动临时隧道...`);
+    argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`);
   }
 
   log("正在启动 Cloudflared 隧道...");
@@ -168,27 +164,34 @@ loglevel: info`;
     stdio: "ignore"
   });
 
-  webProc.on("exit", () => process.exit(1));
-  botProc.on("exit", () => process.exit(1));
+  webProc.on("exit", (code) => {
+    log(`[警告] sing-box 进程退出，退出码: ${code}`);
+  });
+  botProc.on("exit", (code) => {
+    log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
+  });
 
   let domain = ARGO_DOMAIN;
   if (!domain) {
     log("正在获取 Argo 临时域名...");
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 25; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       if (fs.existsSync(bootLogPath)) {
-        const logText = fs.readFileSync(bootLogPath, "utf-8");
-        const match = logText.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
-        if (match) {
-          domain = match[1];
-          break;
-        }
+        try {
+          const logText = fs.readFileSync(bootLogPath, "utf-8");
+          if (logText && logText.length > 0) {
+            const match = logText.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
+            if (match) {
+              domain = match[1];
+              break;
+            }
+          }
+        } catch (e) {}
       }
     }
   }
 
   if (domain) {
-
     const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${WS_PATH}#${NAME}`;
     log(`\n================== Argo Vless 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
     
@@ -199,11 +202,7 @@ loglevel: info`;
       log(`[错误！] 保存节点链接失败: ${e.message}`);
     }
   } else {
-    log("[错误！] 获取 Argo 临时域名失败！");
-  }
-
-  if (fs.existsSync(bootLogPath)) {
-    try { fs.unlinkSync(bootLogPath); } catch (e) {}
+    log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
   }
 
   const cleanup = () => {
@@ -217,6 +216,7 @@ loglevel: info`;
   process.stdin.resume();
 }
 
-main().catch(() => {
+main().catch((err) => {
+  log(`[致命错误] 主流程运行报错: ${err.message}`);
   process.exit(1);
 });

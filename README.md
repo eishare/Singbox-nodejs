@@ -3,15 +3,16 @@
 
 ### 1.Argo Tunnel
 
+* 可选http2或quic模式
 * 64MB存储，完成部署、生成节点，需要立刻手动删除tmp文件夹，防止存储溢出
 * （适用场景：直连线路差、UDP被阻断，或未开放映射端口）
   
 ---
 ### 2.hy2+tuic+reality
 
-* 64MB内存+64MB磁盘（如freecloudpanel）推荐只部署单节点
 * 单端口，可选择UDP+TCP的不同组合
 * 2个端口以上，可全部部署
+* 64MB内存+64MB磁盘（如freecloudpanel）推荐只部署单节点
 * （适用场景：直连UDP无阻断，已开放映射端口）
 
 ---

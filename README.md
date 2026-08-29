@@ -25,10 +25,15 @@
 ### 📌兼容环境测试记录
 以下平台仅用于验证 Docker 容器与面板架构的兼容性：
 
-* Lunes Host
-* Katabump
-* Bot hosting（不支持argo）
-* Freecloudpanel
+* Lunes Host：内存+磁盘 128+512，每15天登录一次控制台保活
+  
+* Katabump：内存+磁盘 308+716，每4天续期保活
+  
+* Bot hosting：内存+磁盘 256+512，每天Earn Coins赚取10金币，自动扣费续期保活
+             （⚠️不开放7844端口，不支持Argo）
+  
+* Freecloudpanel：内存+磁盘 64+64，每30天续期保活
+                  （⚠️不定期开放注册）
 ---
 
 ⚠️ **免责声明（Disclaimer）**

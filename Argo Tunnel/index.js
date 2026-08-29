@@ -3,8 +3,8 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                    // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";       // 隧道协议默认 http2（TCP）更稳；quic（UDP）仅作测试用
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";     // Argo隧道连接数 默认4高性能，（1的占用最低，但抗抖动差)
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";       // 固定隧道协议默认 http2（TCP）更稳；quic具备UDP特性，但占用高，仅作测试用
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";     // 固定隧道连接数 默认4=高性能（1=占用最低，但抗抖动差)
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                  // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";               // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                         // 端口

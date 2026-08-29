@@ -225,7 +225,6 @@ loglevel: info`;
     log("[错误！] 获取 Argo 临时域名失败！");
   }
 
-  // 延时 10 秒清理，防止在握手阶段抢占 RAM
   setTimeout(() => {
     try {
       if (fs.existsSync(webPath)) fs.unlinkSync(webPath);

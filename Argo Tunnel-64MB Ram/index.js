@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
-process.env.GOGC = "1";
+process.env.GOGC = "50"; 
 process.env.GOMAXPROCS = "1";
 
 const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -42,7 +42,7 @@ function downloadFile(urlStr, targetPath) {
         req.destroy();
         return reject(new Error(`HTTP 状态码异常: ${res.statusCode}`));
       }
-      const file = fs.createWriteStream(targetPath, { highWaterMark: 1024 * 4 });
+      const file = fs.createWriteStream(targetPath);
       res.pipe(file);
       file.on("finish", () => {
         file.close(() => {
@@ -79,7 +79,6 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
- 
   try {
     execSync(`pkill -9 -f ${webPath} || true`);
     execSync(`pkill -9 -f ${botPath} || true`);
@@ -131,7 +130,7 @@ async function main() {
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
     env: Object.assign({}, process.env, { 
-      GOMEMLIMIT: "2MiB",
+      GOMEMLIMIT: "18MiB",
       GODEBUG: "madvdontneed=1,cgocheck=0" 
     }),
     stdio: "ignore"
@@ -143,9 +142,9 @@ async function main() {
     "tunnel",
     "--edge-ip-version", "4",
     "--protocol", "http2",
-    "--ha-connections", "1",
+    "--ha-connections", "2", 
     "--no-autoupdate",
-    "--retries", "3"
+    "--retries", "5"
   ];
 
   const authTrim = ARGO_AUTH.trim();
@@ -159,9 +158,7 @@ async function main() {
       const tunnelYaml = `tunnel: ${tunnelId}
 credentials-file: ${path.join(FILE_PATH, "tunnel.json")}
 protocol: http2
-ha-connections: 1
-heartbeat-interval: 45s
-keep-alive-timeout: 90s
+ha-connections: 2
 
 ingress:
   - hostname: ${ARGO_DOMAIN}
@@ -174,9 +171,7 @@ ingress:
   } else if (authTrim.length > 30) {
     const tokenYaml = `token: ${authTrim}
 protocol: http2
-ha-connections: 1
-heartbeat-interval: 45s
-keep-alive-timeout: 90s
+ha-connections: 2
 ingress:
   - service: http://127.0.0.1:${ARGO_PORT}`;
     
@@ -185,9 +180,7 @@ ingress:
   } else {
     const tempYaml = `url: http://127.0.0.1:${ARGO_PORT}
 logfile: ${bootLogPath}
-loglevel: info
-heartbeat-interval: 45s
-keep-alive-timeout: 90s`;
+loglevel: info`;
     
     fs.writeFileSync(path.join(FILE_PATH, "temp_argo.yml"), tempYaml);
     argoArgs.push("--config", path.join(FILE_PATH, "temp_argo.yml"));
@@ -196,7 +189,7 @@ keep-alive-timeout: 90s`;
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
     env: Object.assign({}, process.env, { 
-      GOMEMLIMIT: "4MiB",
+      GOMEMLIMIT: "28MiB",
       GODEBUG: "madvdontneed=1,cgocheck=0" 
     }),
     stdio: "ignore"
@@ -232,21 +225,15 @@ keep-alive-timeout: 90s`;
     log("[错误！] 获取 Argo 临时域名失败！");
   }
 
+  // 延时 10 秒清理，防止在握手阶段抢占 RAM
   setTimeout(() => {
     try {
       if (fs.existsSync(webPath)) fs.unlinkSync(webPath);
       if (fs.existsSync(botPath)) fs.unlinkSync(botPath);
       if (fs.existsSync(bootLogPath)) fs.unlinkSync(bootLogPath);
-      log("二进制安装包与临时日志已清理。");
+      log("[磁盘优化] 二进制文件已自动清理。");
     } catch (e) {}
-
-    if (global.gc) {
-      try {
-        global.gc();
-        log("已执行 V8 手动 GC 内存回收。");
-      } catch (e) {}
-    }
-  }, 3000);
+  }, 10000);
 
   const cleanup = () => {
     try { webProc.kill("SIGKILL"); } catch (e) {}

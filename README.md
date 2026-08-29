@@ -3,7 +3,7 @@
 
 ### 1.Argo Tunnel
 
-* 可选http2或quic模式
+* 可切换http2/quic模式
   
 * 64MB存储，完成部署、生成节点，需要立刻手动删除tmp文件夹，防止存储溢出
   

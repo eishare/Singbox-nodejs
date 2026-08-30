@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                           // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                               // 固定隧道Token（留空=临时隧道）
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                  // 固定隧道域名（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";                      // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";                  // 固定隧道协议默认 http2（TCP）更稳；quic具备UDP特性，占用高
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";                // 固定隧道连接数 默认4=高性能（1=占用最低，抗抖动差)
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";         // http2稳定，quic具备UDP特性，网络加载速度快&内存占用高
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";       // 连接数4=并发吞吐能力高&占用高
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;                             // Cloudflare回源URL端口
-const CFIP = process.env.CFIP || "www.visa.com.hk";                          // 优选域名/IP
-const CFPORT = process.env.CFPORT || 443;                                    // 端口
-const NAME = process.env.NAME || "Argo_EasyShare";            
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                    // Cloudflare回源端口
+const CFIP = process.env.CFIP || "www.visa.com.hk";                 // 优选域名/IP
+const CFPORT = process.env.CFPORT || 443;                           // 端口
+const NAME = process.env.NAME || "Argo_EasyShare";             
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
@@ -22,15 +22,19 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
 
-process.env.GODEBUG = "madvdontneed=1,cgocheck=0";
-process.env.GOGC = "50"; 
-delete process.env.GOMAXPROCS;
+const GO_BASE_ENV = {
+  ...process.env,
+  GODEBUG: "madvdontneed=1,cgocheck=0",
+  GOMAXPROCS: "1",
+  GOGC: "20"
+};
 
-const UUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+const rawUUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
   const r = (Math.random() * 16) | 0;
   return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
 }));
 
+const UUID = rawUUID.toLowerCase();
 const WS_PATH = `/${UUID}-vless`;
 const log = (msg) => process.stdout.write(msg + "\n");
 
@@ -133,11 +137,11 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, process.env, { GOMEMLIMIT: "30MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "16MiB" }),
     stdio: "ignore"
   });
 
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 1000));
 
   const authTrim = ARGO_AUTH.trim();
   
@@ -145,22 +149,21 @@ async function main() {
     "tunnel",
     "--no-autoupdate",
     "--protocol", ARGO_PROTOCOL.toLowerCase(),
-    "--ha-connections", String(ARGO_CONNECTIONS),
-    "--logfile", bootLogPath,
-    "--loglevel", "info"
+    "--ha-connections", String(ARGO_CONNECTIONS)
   ];
 
   if (authTrim.length > 30) {
-    log(`检测到有效Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
-    argoArgs.push("run", "--token", authTrim, "--url", `http://127.0.0.1:${ARGO_PORT}`);
+    log(`检测到 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
+    // 移除 --url，禁止向日志写盘以节省内存
+    argoArgs.push("run", "--token", authTrim);
   } else {
-    log(`未检测到有效Token，启动临时隧道...`);
-    argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`);
+    log(`未检测到 Token，启动临时隧道...`);
+    argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`, "--logfile", bootLogPath, "--loglevel", "info");
   }
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, process.env, { GOMEMLIMIT: "45MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "24MiB" }),
     stdio: "ignore"
   });
 
@@ -172,7 +175,7 @@ async function main() {
   });
 
   let domain = ARGO_DOMAIN;
-  if (!domain) {
+  if (!domain && authTrim.length <= 30) {
     log("正在获取 Argo 临时域名...");
     for (let i = 0; i < 25; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -201,8 +204,14 @@ async function main() {
     } catch (e) {
       log(`[错误！] 保存节点链接失败: ${e.message}`);
     }
+  } else if (authTrim.length > 30) {
+    log(`[提示] 已启动固定隧道，请确保已在 Cloudflare Tunnels配置了服务URL (指向 http://127.0.0.1:${ARGO_PORT})。`);
   } else {
     log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
+  }
+
+  if (fs.existsSync(bootLogPath) && authTrim.length > 30) {
+    try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
 
   const cleanup = () => {

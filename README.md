@@ -25,11 +25,11 @@
 
 以下平台仅用于验证 Docker 容器与面板架构的兼容性：
 
-* Lunes Host：128/512，每15天登录一次控制台续期
+* Lunes Host：内存+存储 128+512，每15天登录一次控制台续期
   
-* Katabump：308/716，每4天续期
+* Katabump：308+716，每4天续期
   
-* Bot hosting：256/512，Earn Coins每日赚取10金币，自动扣费续期
+* Bot hosting：256+512，Earn Coins每日赚取10金币，自动扣费续期
                 （❗️不开放7844端口，不支持Argo）
   
 * Freecloudpanel：64+64，每30天续期

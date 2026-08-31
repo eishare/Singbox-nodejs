@@ -217,7 +217,7 @@ async function main() {
     if (fs.existsSync(webPath)) {
       try {
         fs.unlinkSync(webPath);
-        log("存储优化] 进程已运行，已成功清理 web 文件");
+        log("[存储优化] 进程已运行，已成功清理 web 文件");
       } catch (e) {
         log(`[清理失败] 删除 web 文件出错: ${e.message}`);
       }

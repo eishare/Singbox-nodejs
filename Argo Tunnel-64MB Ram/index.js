@@ -3,8 +3,8 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                   // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                       // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";          // http2稳定低占用；quic响应快
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 建议连接数量（http2=4；quic=1）
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";          // http2稳定+低占用；quic响应快+占用略高
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数建议：http2=4，quic=1
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";                  // 优选域名/IP
@@ -137,18 +137,13 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "16MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "20MiB" }),
     stdio: "ignore"
-  });
-
-  webProc.on("exit", (code) => {
-    log(`[警告] sing-box 进程退出，退出码: ${code}`);
   });
 
   await new Promise((r) => setTimeout(r, 1000));
 
   const authTrim = ARGO_AUTH.trim();
-  const isFixedTunnel = authTrim.length > 30; 
 
   let argoArgs = [
     "tunnel",
@@ -157,7 +152,7 @@ async function main() {
     "--ha-connections", String(ARGO_CONNECTIONS)
   ];
 
-  if (isFixedTunnel) {
+  if (authTrim.length > 30) {
     log(`检测到 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
     argoArgs.push("run", "--token", authTrim);
   } else {
@@ -166,43 +161,20 @@ async function main() {
   }
 
   log("正在启动 Cloudflared 隧道...");
+  let botProc = spawn(botPath, argoArgs, {
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "36MiB" }),
+    stdio: "ignore"
+  });
 
-  let botProc = null;
-  let isExitingManual = false;
-
-  const startBotProc = () => {
-    botProc = spawn(botPath, argoArgs, {
-      env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "24MiB" }),
-      stdio: "ignore"
-    });
-
-    botProc.on("exit", (code) => {
-      log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
-      if (isFixedTunnel && !isExitingManual) {
-        log(`[隧道保活] 检测到 Cloudflared 进程中断，3 秒后重新拉起...`);
-        setTimeout(() => {
-          if (!isExitingManual) startBotProc();
-        }, 3000);
-      }
-    });
-  };
-
-  startBotProc();
-
-  setTimeout(() => {
-    log("[空间优化] 正在删除 web (sing-box) 文件以释放磁盘空间...");
-    if (fs.existsSync(webPath)) {
-      try {
-        fs.unlinkSync(webPath);
-        log("[空间优化] 成功删除 web 文件");
-      } catch (e) {
-        log(`[空间优化警告] 删除 web 文件失败: ${e.message}`);
-      }
-    }
-  }, 10000);
+  webProc.on("exit", (code) => {
+    log(`[警告] sing-box 进程退出，退出码: ${code}`);
+  });
+  botProc.on("exit", (code) => {
+    log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
+  });
 
   let domain = ARGO_DOMAIN;
-  if (!domain && !isFixedTunnel) {
+  if (!domain && authTrim.length <= 30) {
     log("正在获取 Argo 临时域名...");
     for (let i = 0; i < 25; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -231,18 +203,28 @@ async function main() {
     } catch (e) {
       log(`[错误！] 保存节点链接失败: ${e.message}`);
     }
-  } else if (isFixedTunnel) {
-    log(`[提示] 已启动固定隧道，请确保已在 Cloudflare Tunnels 配置了服务 URL (指向 http://127.0.0.1:${ARGO_PORT})。`);
+  } else if (authTrim.length > 30) {
+    log(`[提示] 已启动固定隧道，请确保已在 Cloudflare Tunnels配置了服务URL (指向 http://127.0.0.1:${ARGO_PORT})。`);
   } else {
     log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
   }
 
-  if (fs.existsSync(bootLogPath) && isFixedTunnel) {
+  if (fs.existsSync(bootLogPath) && authTrim.length > 30) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
 
+  setTimeout(() => {
+    if (fs.existsSync(webPath)) {
+      try {
+        fs.unlinkSync(webPath);
+        log("存储优化] 进程已运行，已成功清理 web 文件");
+      } catch (e) {
+        log(`[清理失败] 删除 web 文件出错: ${e.message}`);
+      }
+    }
+  }, 10000);
+
   const cleanup = () => {
-    isExitingManual = true;
     try { webProc.kill("SIGKILL"); } catch (e) {}
     try { botProc.kill("SIGKILL"); } catch (e) {}
     process.exit(0);

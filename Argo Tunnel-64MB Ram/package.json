@@ -1,0 +1,12 @@
+{
+  "name": "vless-argo-node",
+  "version": "1.0.0",
+  "description": "High performance VLESS Argo Node for 100MB+ RAM environments",
+  "main": "index.js",
+  "scripts": {
+    "start": "chmod +x start.sh && ./start.sh"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

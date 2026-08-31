@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                  // 固定隧道域名（留空=临时隧道）
-const ARGO_AUTH = process.env.ARGO_AUTH || "";                      // 固定隧道Token（留空=临时隧道）
+const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                   // 固定隧道域名（留空=临时隧道）
+const ARGO_AUTH = process.env.ARGO_AUTH || "";                       // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";         // http2稳定，占用低。quic具备UDP特性，极致响应速度，但内存占用高，64MB内存勿选
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "1";       // 连接数4=并发吞吐能力强
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";          // http2稳定低占用；quic响应快
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 建议连接数量（http2=4；quic=1）
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;                    // Cloudflare回源端口
-const CFIP = process.env.CFIP || "www.visa.com.hk";                 // 优选域名/IP
-const CFPORT = process.env.CFPORT || 443;                           // 端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
+const CFIP = process.env.CFIP || "www.visa.com.hk";                  // 优选域名/IP
+const CFPORT = process.env.CFPORT || 443;                            // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";              
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
@@ -20,7 +20,6 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const net = require("net");
 const { spawn } = require("child_process");
 
 const GO_BASE_ENV = {
@@ -142,10 +141,14 @@ async function main() {
     stdio: "ignore"
   });
 
+  webProc.on("exit", (code) => {
+    log(`[警告] sing-box 进程退出，退出码: ${code}`);
+  });
+
   await new Promise((r) => setTimeout(r, 1000));
 
   const authTrim = ARGO_AUTH.trim();
-  const isQuicFixed = (authTrim.length > 30) && (ARGO_PROTOCOL.toLowerCase() === "quic");
+  const isFixedTunnel = authTrim.length > 30; 
 
   let argoArgs = [
     "tunnel",
@@ -154,9 +157,8 @@ async function main() {
     "--ha-connections", String(ARGO_CONNECTIONS)
   ];
 
-  if (authTrim.length > 30) {
+  if (isFixedTunnel) {
     log(`检测到 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
-    // 移除 --url，禁止向日志写盘以节省内存
     argoArgs.push("run", "--token", authTrim);
   } else {
     log(`未检测到 Token，启动临时隧道...`);
@@ -176,8 +178,8 @@ async function main() {
 
     botProc.on("exit", (code) => {
       log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
-      if (isQuicFixed && !isExitingManual) {
-        log(`[QUIC 保活] 检测到进程意外中断，3 秒后尝试重新拉起 Cloudflared...`);
+      if (isFixedTunnel && !isExitingManual) {
+        log(`[隧道保活] 检测到 Cloudflared 进程中断，3 秒后重新拉起...`);
         setTimeout(() => {
           if (!isExitingManual) startBotProc();
         }, 3000);
@@ -187,7 +189,6 @@ async function main() {
 
   startBotProc();
 
-  // 部署完成后 10 秒清理磁盘空间：仅删除 web，保留 bot
   setTimeout(() => {
     log("[空间优化] 正在删除 web (sing-box) 文件以释放磁盘空间...");
     if (fs.existsSync(webPath)) {
@@ -200,43 +201,8 @@ async function main() {
     }
   }, 10000);
 
-  webProc.on("exit", (code) => {
-    log(`[警告] sing-box 进程退出，退出码: ${code}`);
-  });
-
-  // 针对 QUIC 固定隧道的心跳检测与死连接自动修复
-  if (isQuicFixed) {
-    log("[QUIC 保活] 开启每 30 秒的 UDP/Tunnel 健康探针心跳检测...");
-    setInterval(() => {
-      if (isExitingManual) return;
-      
-      const socket = new net.Socket();
-      socket.setTimeout(5000);
-      
-      socket.connect(parseInt(ARGO_PORT), "127.0.0.1", () => {
-        socket.destroy();
-      });
-
-      socket.on("error", () => {
-        socket.destroy();
-        log("[QUIC 保活警告] 心跳探针未响应，尝试重启 Cloudflared 进程重建 UDP 隧道...");
-        if (botProc) {
-          try { botProc.kill("SIGKILL"); } catch (e) {}
-        }
-      });
-
-      socket.on("timeout", () => {
-        socket.destroy();
-        log("[QUIC 保活警告] 心跳探针超时，尝试重启 Cloudflared 进程重建 UDP 隧道...");
-        if (botProc) {
-          try { botProc.kill("SIGKILL"); } catch (e) {}
-        }
-      });
-    }, 30000);
-  }
-
   let domain = ARGO_DOMAIN;
-  if (!domain && authTrim.length <= 30) {
+  if (!domain && !isFixedTunnel) {
     log("正在获取 Argo 临时域名...");
     for (let i = 0; i < 25; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -265,13 +231,13 @@ async function main() {
     } catch (e) {
       log(`[错误！] 保存节点链接失败: ${e.message}`);
     }
-  } else if (authTrim.length > 30) {
-    log(`[提示] 已启动固定隧道，请确保已在 Cloudflare Tunnels配置了服务URL (指向 http://127.0.0.1:${ARGO_PORT})。`);
+  } else if (isFixedTunnel) {
+    log(`[提示] 已启动固定隧道，请确保已在 Cloudflare Tunnels 配置了服务 URL (指向 http://127.0.0.1:${ARGO_PORT})。`);
   } else {
     log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
   }
 
-  if (fs.existsSync(bootLogPath) && authTrim.length > 30) {
+  if (fs.existsSync(bootLogPath) && isFixedTunnel) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
 

@@ -18,9 +18,7 @@
 * **📌 适用场景**：
   * 直连线路质量差、UDP 遭受严重 QoS 限速或阻断。
   * 平台未开放入站端口映射或无固定公网 IP。
-  > [!WARNING]
-> **Argo Tunnel - 64MB RAM 专属**
-> 适用于 64MB 内存环境（如 FreeCloudPanel），建议仅部署单节点以防 OOM 崩溃。
+ ![64MB 专属](https://img.shields.io/badge/内存提醒-64MB%20RAM%20专属-yellow?style=flat-square)
 
 ---
 

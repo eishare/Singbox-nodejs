@@ -22,18 +22,13 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 
-try {
-  execSync("pkill -9 -f sing-box || true");
-  execSync("pkill -9 -f cloudflared || true");
-  execSync("rm -rf /tmp/* || true");
-  log("[提示] 部署环境已清理");
-} catch (e) {}
+
 
 const GO_BASE_ENV = {
   ...process.env,
   GODEBUG: "madvdontneed=1,cgocheck=0",
   GOMAXPROCS: "1",
-  GOGC: "30"
+  GOGC: "15"
 };
 
 const rawUUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -94,6 +89,11 @@ const bootLogPath = path.join(FILE_PATH, "boot.log");
 const configPath = path.join(FILE_PATH, "config.json");
 
 async function main() {
+  try { execSync("pkill -9 -f sing-box", { stdio: "ignore" }); } catch (e) {}
+  try { execSync("pkill -9 -f cloudflared", { stdio: "ignore" }); } catch (e) {}
+  try { execSync("rm -rf /tmp/*", { stdio: "ignore" }); } catch (e) {}
+  log("[环境重置] 历史进程与临时文件已清理");
+
   if (fs.existsSync(bootLogPath)) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
@@ -143,7 +143,7 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "20MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "12MiB" }),
     stdio: "ignore"
   });
 
@@ -168,7 +168,7 @@ async function main() {
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "36MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "26MiB" }),
     stdio: "ignore"
   });
 
@@ -215,7 +215,7 @@ async function main() {
     log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
   }
 
-  if (fs.existsSync(bootLogPath) && authTrim.length > 30) {
+  if (fs.existsSync(bootLogPath)) {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
 
@@ -223,7 +223,7 @@ async function main() {
     if (fs.existsSync(webPath)) {
       try {
         fs.unlinkSync(webPath);
-        log("[存储优化] 进程运行中，已成功清理 web 文件");
+        log("[存储清理] 服务运行中，二进制组件已清理");
       } catch (e) {
         log(`[清理失败] 删除 web 文件出错: ${e.message}`);
       }
@@ -242,6 +242,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  log(`[致命错误] 主流程运行报错: ${err.message}`);
+  console.error(`[致命错误] 主流程运行报错: ${err.message}`);
   process.exit(1);
 });

@@ -4,9 +4,9 @@ const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                   // 固定�
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                       // 固定隧道Token（留空=临时隧道）
 
 const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";           // http2=稳定+低占用；quic=响应快+占用略高
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数量建议：http2=4；quic=1
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数量默认4；可设置1~8，数量越多=占用越高
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口，与服务URL末尾端口一致
 const CFIP = process.env.CFIP || "www.wto.org";                      // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                            // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";              
@@ -27,7 +27,7 @@ const { spawn, execSync } = require("child_process");
 const GO_BASE_ENV = {
   ...process.env,
   GODEBUG: "madvdontneed=1,cgocheck=0",
-  GOGC: "80"
+  GOGC: "100"
 };
 
 const rawUUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -151,7 +151,7 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "32MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "48MiB" }),
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -172,7 +172,7 @@ async function main() {
 
   if (authTrim.length > 30) {
     log(`检测到 Token，启动固定隧道 [协议:${ARGO_PROTOCOL} | 连接数:${ARGO_CONNECTIONS}]...`);
-    argoArgs.push("run", "--token", authTrim, "--url", `http://127.0.0.1:${ARGO_PORT}`);
+    argoArgs.push("run", "--token", authTrim);
   } else {
     log(`未检测到 Token，启动临时隧道...`);
     argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`, "--logfile", bootLogPath, "--loglevel", "info");
@@ -180,8 +180,8 @@ async function main() {
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "64MiB" }),
-    stdio: "ignore"
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "80MiB" }),
+    stdio: ["ignore", "pipe", "pipe"]
   });
 
   webProc.on("exit", (code) => {

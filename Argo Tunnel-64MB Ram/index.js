@@ -3,8 +3,8 @@
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                   // 固定隧道域名（留空=临时隧道）
 const ARGO_AUTH = process.env.ARGO_AUTH || "";                       // 固定隧道Token（留空=临时隧道）
 
-const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "http2";          // http2稳定+低占用；quic响应快+占用略高
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数建议：http2=4，quic=1
+const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "";               // http2=稳定+低占用；quic=响应快+占用略高
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数量建议：http2=4；quic=1
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";                  // 优选域名/IP
@@ -20,13 +20,20 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
+
+try {
+  execSync("pkill -9 -f sing-box || true");
+  execSync("pkill -9 -f cloudflared || true");
+  execSync("rm -rf /tmp/* || true");
+  log("[提示] 部署环境已清理");
+} catch (e) {}
 
 const GO_BASE_ENV = {
   ...process.env,
   GODEBUG: "madvdontneed=1,cgocheck=0",
   GOMAXPROCS: "1",
-  GOGC: "20"
+  GOGC: "30"
 };
 
 const rawUUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -69,7 +76,6 @@ function downloadFile(urlStr, targetPath) {
 
 function extractSingbox(tarPath, targetWebPath) {
   try {
-    const { execSync } = require("child_process");
     execSync(`tar -xzf "${tarPath}" -C "${FILE_PATH}" --wildcards "*/sing-box" --strip-components=1 || tar -xzf "${tarPath}" -C "${FILE_PATH}" sing-box`);
     const extractedPath = path.join(FILE_PATH, "sing-box");
     if (fs.existsSync(extractedPath)) {
@@ -217,7 +223,7 @@ async function main() {
     if (fs.existsSync(webPath)) {
       try {
         fs.unlinkSync(webPath);
-        log("[存储优化] 进程已运行，已成功清理 web 文件");
+        log("[存储优化] 进程运行中，已成功清理 web 文件");
       } catch (e) {
         log(`[清理失败] 删除 web 文件出错: ${e.message}`);
       }

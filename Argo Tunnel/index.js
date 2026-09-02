@@ -7,7 +7,7 @@ const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";           // http2=�
 const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数量默认4；可设置1~8，数量越多=占用越高
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口，与服务URL末尾端口一致
-const CFIP = process.env.CFIP || "www.wto.org";                      // 优选域名/IP
+const CFIP = process.env.CFIP || "www.visa.com";                     // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                            // 端口
 const NAME = process.env.NAME || "Argo_EasyShare";              
 
@@ -21,13 +21,14 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
-
-
+const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024);
+const singboxMemLimit = totalMemMB <= 128 ? "48MiB" : "128MiB";
+const cloudflaredMemLimit = totalMemMB <= 128 ? "64MiB" : "256MiB";
 
 const GO_BASE_ENV = {
   ...process.env,
   GODEBUG: "madvdontneed=1,cgocheck=0",
-  GOGC: "100"
+  GOGC: process.env.GOGC || "50"   
 };
 
 const rawUUID = process.env.UUID || (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -91,6 +92,7 @@ async function main() {
   try { execSync("pkill -9 -f sing-box", { stdio: "ignore" }); } catch (e) {}
   try { execSync("pkill -9 -f cloudflared", { stdio: "ignore" }); } catch (e) {}
   try { execSync("rm -rf /tmp/*", { stdio: "ignore" }); } catch (e) {}
+  try { execSync("sleep 1"); } catch (e) {}
   log("[环境重置] 历史进程与临时文件已清理");
 
   if (fs.existsSync(bootLogPath)) {
@@ -111,14 +113,10 @@ async function main() {
         max_early_data: 2048,
         early_data_header_name: "Sec-WebSocket-Protocol"
       },
-      multiplex: {
-        enabled: true,
-        padding: false
-      }
     }],
     outbounds: [{ 
       type: "direct", 
-      tag: "direct",
+      tag: "direct"
     }]
   };
   fs.writeFileSync(configPath, JSON.stringify(config));
@@ -149,10 +147,10 @@ async function main() {
   fs.chmodSync(webPath, 0o775);
   fs.chmodSync(botPath, 0o775);
 
-  log("正在启动 sing-box 服务...");
+  log(`正在启动 sing-box 服务...`);
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "48MiB" }),
-    stdio: ["ignore", "pipe", "pipe"]
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: singboxMemLimit }), 
+    stdio: ["ignore", "ignore", "pipe"]
   });
 
   webProc.stderr.on("data", (data) => {
@@ -178,9 +176,9 @@ async function main() {
     argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`, "--logfile", bootLogPath, "--loglevel", "info");
   }
 
-  log("正在启动 Cloudflared 隧道...");
+  log(`正在启动 Cloudflared 隧道...`);
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "80MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: cloudflaredMemLimit }), 
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -192,7 +190,8 @@ async function main() {
   });
 
   let domain = ARGO_DOMAIN;
-  if (!domain && authTrim.length <= 30) {
+  if (authTrim.length <= 30) {
+    domain = ""; 
     log("正在获取 Argo 临时域名...");
     for (let i = 0; i < 25; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -212,7 +211,8 @@ async function main() {
   }
 
   if (domain) {
-    const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${WS_PATH}#${NAME}`;
+    const encodedPath = encodeURIComponent(WS_PATH);
+const plainNodeLink = `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${encodedPath}#${NAME}`;
     log(`\n================== Argo Vless 节点链接 ==================\n${plainNodeLink}\n===================================================\n`);
 
     try {

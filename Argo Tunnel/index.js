@@ -7,9 +7,9 @@ const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";           // http2=�
 const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "4";        // 连接数量默认4；可设置1~8，数量越多=占用越高
 
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口，与服务URL末尾端口一致
-const CFIP = process.env.CFIP || "www.visa.com";                     // 优选域名/IP
+const CFIP = process.env.CFIP || "www.wto.org";                      // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                            // 端口
-const NAME = process.env.NAME || "Argo_EasyShare";              
+const NAME = process.env.NAME || "Argo_easyshare";              
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 
@@ -22,8 +22,8 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024);
-const singboxMemLimit = totalMemMB <= 128 ? "48MiB" : "128MiB";
-const cloudflaredMemLimit = totalMemMB <= 128 ? "64MiB" : "256MiB";
+const singboxMemLimit = totalMemMB < 100 ? "48MiB" : (totalMemMB <= 150 ? "96MiB" : "128MiB");
+const cloudflaredMemLimit = totalMemMB < 100 ? "64MiB" : (totalMemMB <= 150 ? "160MiB" : "256MiB");
 
 const GO_BASE_ENV = {
   ...process.env,
@@ -189,20 +189,23 @@ async function main() {
     log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
   });
 
-  let domain = ARGO_DOMAIN;
-  if (authTrim.length <= 30) {
-    domain = ""; 
-    log("正在获取 Argo 临时域名...");
-    for (let i = 0; i < 25; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      if (fs.existsSync(bootLogPath)) {
-        try {
-          const logText = fs.readFileSync(bootLogPath, "utf-8");
-          if (logText && logText.length > 0) {
-            const match = logText.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
-            if (match) {
-              domain = match[1];
-              break;
+  let domain = "";
+if (authTrim.length > 30) {
+  // 固定隧道优先使用 ARGO_DOMAIN
+  domain = ARGO_DOMAIN.trim();
+} else {
+  // 临时隧道快速轮询抓取域名（每500ms检查一次，最多等待15秒）
+  log("正在获取 Argo 临时域名...");
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (fs.existsSync(bootLogPath)) {
+      try {
+        const logText = fs.readFileSync(bootLogPath, "utf-8");
+        if (logText && logText.length > 0) {
+          const match = logText.match(/https?:\/\/([a-zA-Z0-9-]+\.trycloudflare\.com)/);
+          if (match) {
+            domain = match[1];
+            break;
             }
           }
         } catch (e) {}

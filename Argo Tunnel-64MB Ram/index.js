@@ -9,7 +9,7 @@ const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "1";        // 连接�
 const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
 const CFIP = process.env.CFIP || "www.visa.com.hk";                  // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                            // 端口
-const NAME = process.env.NAME || "Argo_EasyShare";              
+const NAME = process.env.NAME || "Argo_easyshare";              
 
 const FILE_PATH = process.env.FILE_PATH || ".tmp";
 const URL_FILE_PATH = process.env.URL_FILE_PATH || "sub.txt"; 

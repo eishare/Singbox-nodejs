@@ -6,7 +6,7 @@ const ARGO_AUTH = process.env.ARGO_AUTH || "";                       // 固定�
 const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";           // http2=稳定+低占用；quic=响应快+占用略高
 const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "1";        // 连接数量建议：http2=4；quic=1
 
-const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口
+const ARGO_PORT = process.env.ARGO_PORT || 8001;                     // Cloudflare回源端口，与服务URL末尾端口一致
 const CFIP = process.env.CFIP || "www.visa.com.hk";                  // 优选域名/IP
 const CFPORT = process.env.CFPORT || 443;                            // 端口
 const NAME = process.env.NAME || "Argo_easyshare";              
@@ -92,6 +92,7 @@ async function main() {
   try { execSync("pkill -9 -f sing-box", { stdio: "ignore" }); } catch (e) {}
   try { execSync("pkill -9 -f cloudflared", { stdio: "ignore" }); } catch (e) {}
   try { execSync("rm -rf /tmp/*", { stdio: "ignore" }); } catch (e) {}
+  await new Promise((r) => setTimeout(r, 1000)); 
   log("[环境重置] 历史进程与临时文件已清理");
 
   if (fs.existsSync(bootLogPath)) {
@@ -143,8 +144,9 @@ async function main() {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(webPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "12MiB" }),
-    stdio: "ignore"
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "10MiB" }),
+    stdio: "ignore",
+    detached: true 
   });
 
   await new Promise((r) => setTimeout(r, 1000));
@@ -168,16 +170,13 @@ async function main() {
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "26MiB" }),
-    stdio: "ignore"
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "20MiB" }),
+    stdio: "ignore",
+    detached: true 
   });
-
-  webProc.on("exit", (code) => {
-    log(`[警告] sing-box 进程退出，退出码: ${code}`);
-  });
-  botProc.on("exit", (code) => {
-    log(`[警告] Cloudflared 进程退出，退出码: ${code}`);
-  });
+    
+  webProc.unref();
+  botProc.unref();
 
   let domain = ARGO_DOMAIN;
   if (!domain && authTrim.length <= 30) {
@@ -219,26 +218,16 @@ async function main() {
     try { fs.unlinkSync(bootLogPath); } catch (e) {}
   }
 
-  setTimeout(() => {
-    if (fs.existsSync(webPath)) {
-      try {
-        fs.unlinkSync(webPath);
-        log("[存储清理] 服务运行中，二进制组件已清理");
-      } catch (e) {
-        log(`[清理失败] 删除 web 文件出错: ${e.message}`);
-      }
+  if (fs.existsSync(webPath)) {
+    try {
+      fs.unlinkSync(webPath);
+      log("[磁盘清理] sing-box 已在内存运行，已从磁盘删除以释放空间");
+    } catch (e) {
+      log(`[清理失败] 删除 web 文件出错: ${e.message}`);
     }
-  }, 10000);
-
-  const cleanup = () => {
-    try { webProc.kill("SIGKILL"); } catch (e) {}
-    try { botProc.kill("SIGKILL"); } catch (e) {}
-    process.exit(0);
-  };
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-
-  process.stdin.resume();
+  }
+  log("[引导完成] 守护进程持续运行中...");
+  setInterval(() => {}, 2147483647);
 }
 
 main().catch((err) => {

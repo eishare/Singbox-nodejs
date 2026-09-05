@@ -109,9 +109,7 @@ async function main() {
       users: [{ uuid: UUID }],
       transport: {
         type: "ws",
-        path: WS_PATH,
-        max_early_data: 2048,
-        early_data_header_name: "Sec-WebSocket-Protocol"
+        path: WS_PATH
       }
     }],
     outbounds: [{ type: "direct", tag: "direct" }]
@@ -149,7 +147,7 @@ if (!fs.existsSync(botPath)) {
 
   log("正在启动 sing-box 服务...");
   let webProc = spawn(runWebPath, ["run", "-c", configPath], {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "10MiB" }),
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "30MiB" }),
     stdio: "ignore",
     detached: true 
   });
@@ -188,7 +186,7 @@ if (!fs.existsSync(botPath)) {
 
   log("正在启动 Cloudflared 隧道...");
   let botProc = spawn(botPath, argoArgs, {
-    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "20MiB" }), 
+    env: Object.assign({}, GO_BASE_ENV, { GOMEMLIMIT: "40MiB" }), 
     stdio: "ignore",
     detached: true
   });

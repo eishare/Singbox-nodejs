@@ -126,7 +126,7 @@ async function main() {
     const tempTar = path.join(FILE_PATH, "singbox.tar.gz");
     await downloadFile(singboxTarUrl, tempTar);
     extractSingbox(tempTar, webPath);
-    try { fs.unlinkSync(tempTar); } catch (e) {}
+    try { fs.unlinkSync(tempTar); } catch (e) {} 
   }
 
   if (!fs.existsSync(botPath)) {
@@ -145,7 +145,14 @@ async function main() {
   });
 
   await new Promise((r) => setTimeout(r, 1000));
-
+if (fs.existsSync(webPath)) {
+    try {
+      fs.unlinkSync(webPath);
+      log("[磁盘清理] sing-box (web) 文件已从磁盘彻底删除");
+    } catch (e) {
+      log(`[清理提示] 删除 web 文件失败: ${e.message}`);
+    }
+  }
   const authTrim = ARGO_AUTH.trim();
   const isFixedTunnel = authTrim.length > 30;
 
@@ -161,7 +168,7 @@ async function main() {
     argoArgs.push("run", "--token", authTrim, "--logfile", "/dev/null");
   } else {
     log(`未检测到 Token，启动临时隧道...`);
-    argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`, "--logfile", "/dev/null");
+    argoArgs.push("--url", `http://127.0.0.1:${ARGO_PORT}`);
   }
 
   log("正在启动 Cloudflared 隧道...");
@@ -194,13 +201,15 @@ async function main() {
         if (match) {
           resolved = true;
           clearTimeout(timeout);
+          botProc.stderr.removeAllListeners("data"); 
+          botProc.stderr.pause(); // 挂起流，绝不杀死 cloudflared
           resolve(match[1]);
         }
       });
     });
-
-botProc.stderr.removeAllListeners("data");
-    botProc.stderr.destroy();
+      }
+    if (global.gc) {
+    try { global.gc(); } catch (e) {}
   }
 
   if (domain) {
@@ -219,15 +228,6 @@ botProc.stderr.removeAllListeners("data");
     log("[错误！] 获取 Argo 临时域名失败，请检查 boot.log 日志内容！");
   }
 
-  if (fs.existsSync(webPath)) {
-    try {
-      fs.unlinkSync(webPath);
-      log("[磁盘清理] sing-box 已在内存运行，已从磁盘删除以释放空间");
-    } catch (e) {
-      log(`[清理失败] 删除 web 文件出错: ${e.message}`);
-    }
-  }
-  log("[引导完成] 守护进程持续运行中...");
   setInterval(() => {}, 2147483647);
 }
 

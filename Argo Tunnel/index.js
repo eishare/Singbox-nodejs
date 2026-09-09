@@ -54,37 +54,37 @@ const totalMemMB = (containerMem > 0 && containerMem < 10000) ? containerMem : M
 let singboxMemLimit, cloudflaredMemLimit, dynamicGOGC, dynamicProcs;
 
 if (totalMemMB <= 160) {
-  singboxMemLimit = "35MiB";
-  cloudflaredMemLimit = "65MiB";
-  dynamicGOGC = "60";     
+  singboxMemLimit = "32MiB";
+  cloudflaredMemLimit = "72MiB";
+  dynamicGOGC = "100";     
   dynamicProcs = "1";     
 
 } else if (totalMemMB < 256) {
-  singboxMemLimit = "60MiB";
-  cloudflaredMemLimit = "110MiB";
-  dynamicGOGC = "90";
-  dynamicProcs = "1";
+  singboxMemLimit = "48MiB";
+  cloudflaredMemLimit = "112MiB";
+  dynamicGOGC = "120";
+  dynamicProcs = "2";
 
 } else if (totalMemMB < 320) {
-  singboxMemLimit = "90MiB";
-  cloudflaredMemLimit = "130MiB";
-  dynamicGOGC = "120";    
-  dynamicProcs = "1";     
+  singboxMemLimit = "100MiB";
+  cloudflaredMemLimit = "160MiB";
+  dynamicGOGC = "200";    
+  dynamicProcs = "2";     
 
 } else if (totalMemMB < 448) {
-  singboxMemLimit = "130MiB";
-  cloudflaredMemLimit = "200MiB";
-  dynamicGOGC = "140";
+  singboxMemLimit = "100MiB";
+  cloudflaredMemLimit = "220MiB";
+  dynamicGOGC = "200";
   dynamicProcs = "2";
 
 } else if (totalMemMB < 576) {
-  singboxMemLimit = "180MiB";
+  singboxMemLimit = "128MiB";
   cloudflaredMemLimit = "280MiB";
-  dynamicGOGC = "160";
+  dynamicGOGC = "200";
   dynamicProcs = "2";
 
 } else {
-  singboxMemLimit = "384MiB";
+  singboxMemLimit = "256MiB";
   cloudflaredMemLimit = "512MiB";
   dynamicGOGC = "200";    
   dynamicProcs = process.env.GOMAXPROCS || "4"; 
@@ -215,7 +215,8 @@ async function main() {
     }],
     outbounds: [{ 
       type: "direct", 
-      tag: "direct"
+      tag: "direct",
+      udp_fragment: true
     }],
   };
 

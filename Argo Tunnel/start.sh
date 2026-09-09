@@ -28,7 +28,7 @@ export MALLOC_ARENA_MAX=2
 
 export GOMAXPROCS=2
 
-export GODEBUG="madvdontneed=1,asyncpreempt=1"
+export GODEBUG="madvdontneed=1"
 
 if [ "$TOTAL_MEM_MB" -le 160 ]; then
 

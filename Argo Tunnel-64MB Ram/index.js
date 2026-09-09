@@ -132,7 +132,11 @@ async function main() {
         path: WS_PATH
       }
     }],
-    outbounds: [{ type: "direct", tag: "direct" }]
+    outbounds: [{ 
+      type: "direct", 
+      tag: "direct",
+      udp_fragment: true
+    }],
   };
   fs.writeFileSync(configPath, JSON.stringify(config));
 

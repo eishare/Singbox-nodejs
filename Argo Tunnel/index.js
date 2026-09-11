@@ -54,39 +54,39 @@ const totalMemMB = (containerMem > 0 && containerMem < 10000) ? containerMem : M
 let singboxMemLimit, cloudflaredMemLimit, dynamicGOGC, dynamicProcs;
 
 if (totalMemMB <= 160) {
-  singboxMemLimit = "32MiB";
-  cloudflaredMemLimit = "72MiB";
-  dynamicGOGC = "100";     
+  singboxMemLimit = "45MiB";
+  cloudflaredMemLimit = "80MiB";
+  dynamicGOGC = "80";     
   dynamicProcs = "1";     
 
 } else if (totalMemMB < 256) {
-  singboxMemLimit = "48MiB";
-  cloudflaredMemLimit = "112MiB";
-  dynamicGOGC = "120";
+  singboxMemLimit = "80MiB";
+  cloudflaredMemLimit = "140MiB";
+  dynamicGOGC = "100";
   dynamicProcs = "2";
 
 } else if (totalMemMB < 320) {
-  singboxMemLimit = "100MiB";
-  cloudflaredMemLimit = "160MiB";
-  dynamicGOGC = "200";    
+  singboxMemLimit = "128MiB";
+  cloudflaredMemLimit = "220MiB";
+  dynamicGOGC = "100";    
   dynamicProcs = "2";     
 
 } else if (totalMemMB < 448) {
-  singboxMemLimit = "100MiB";
-  cloudflaredMemLimit = "220MiB";
-  dynamicGOGC = "200";
+  singboxMemLimit = "160MiB";
+  cloudflaredMemLimit = "320MiB";
+  dynamicGOGC = "100";
   dynamicProcs = "2";
 
 } else if (totalMemMB < 576) {
-  singboxMemLimit = "128MiB";
-  cloudflaredMemLimit = "280MiB";
-  dynamicGOGC = "200";
+  singboxMemLimit = "200MiB";
+  cloudflaredMemLimit = "400MiB";
+  dynamicGOGC = "100";
   dynamicProcs = "2";
 
 } else {
-  singboxMemLimit = "256MiB";
-  cloudflaredMemLimit = "512MiB";
-  dynamicGOGC = "200";    
+  singboxMemLimit = "384MiB";
+  cloudflaredMemLimit = "768MiB";
+  dynamicGOGC = "100";    
   dynamicProcs = process.env.GOMAXPROCS || "4"; 
 }
 

@@ -54,9 +54,9 @@ const totalMemMB = (containerMem > 0 && containerMem < 10000) ? containerMem : M
 let singboxMemLimit, cloudflaredMemLimit, dynamicGOGC, dynamicProcs;
 
 if (totalMemMB <= 160) {
-  singboxMemLimit = "45MiB";
-  cloudflaredMemLimit = "80MiB";
-  dynamicGOGC = "80";     
+  singboxMemLimit = "38MiB";
+  cloudflaredMemLimit = "65MiB";
+  dynamicGOGC = "180";     
   dynamicProcs = "1";     
 
 } else if (totalMemMB < 256) {

@@ -59,7 +59,6 @@ function getLocationInfo(code) {
   return `${iata} 节点`;
 }
 
-// 内存与性能监控及限制分级
 let containerMem = 0;
 try {
   const limitStr = fs.existsSync("/sys/fs/cgroup/memory.max") ? fs.readFileSync("/sys/fs/cgroup/memory.max", "utf-8") : fs.readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf-8");
@@ -235,7 +234,6 @@ async function main() {
 
   const inbounds = [];
 
-  // 1. 如果配置了 Argo 端口，添加 VLESS-WS inbound
   if (enableArgo) {
     inbounds.push({
       type: "vless",
@@ -252,7 +250,6 @@ async function main() {
     });
   }
 
-  // 2. 如果配置了 TUIC 端口，生成证书并添加 TUIC inbound
   if (enableTuic) {
     generateCertificates(keyPath, certPath);
     inbounds.push({
@@ -311,7 +308,6 @@ async function main() {
 
   await new Promise((r) => setTimeout(r, 1000));
 
-  // 定义保存和显示节点信息的函数
   let argoNodeLink = "";
   let tuicNodeLink = "";
 
@@ -319,11 +315,11 @@ async function main() {
     const links = [argoNodeLink, tuicNodeLink].filter(Boolean).join("\n");
     if (!links) return;
     
-    log(`\n================== 节点链接列表 ==================\n${links}\n===================================================\n`);
+    log(`\n================== 链接 ==================\n${links}\n===================================================\n`);
     try {
       const base64Sub = Buffer.from(links).toString("base64");
       fs.writeFileSync(URL_FILE_PATH, base64Sub, "utf-8");
-      log(`[成功！] 订阅 (Base64) 已保存至 ${URL_FILE_PATH}`);
+      log(`[成功！] 链接已保存至 ${URL_FILE_PATH}`);
     } catch (e) {
       log(`[错误！] 保存节点订阅失败: ${e.message}`);
     }
@@ -335,7 +331,6 @@ async function main() {
     updateSubFile();
   }
 
-  // 如果没有开启 Argo 隧道，处理完毕后保持进程挂起
   if (!enableArgo) {
     webProc.on("exit", (code) => {
       log(`[警告] sing-box 进程退出，退出码: ${code}`);
@@ -350,7 +345,6 @@ async function main() {
     return;
   }
 
-  // 如果开启了 Argo 隧道，继续启动 Cloudflared
   const cloudflaredUrl = isArm
     ? "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
     : "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64";

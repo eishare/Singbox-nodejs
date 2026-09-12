@@ -28,13 +28,13 @@ if [ -z "$TOTAL_MEM_MB" ] || [ "$TOTAL_MEM_MB" -eq 0 ]; then
     TOTAL_MEM_MB=100
 fi
 
-# 统一预设全套 Go 优化参数，防止被父进程环境变量覆盖
+# 核心修正：必须保留 netdns=go！确保 Go 协程直接处理 DNS，规避系统底层 C 库卡死与超时
 export GODEBUG="madvdontneed=1,cgocheck=0,netdns=go"
 
 # 针对不同内存档位优化 Node.js V8 引擎与 glibc 内存分配
 if [ "$TOTAL_MEM_MB" -le 160 ]; then
     export MALLOC_ARENA_MAX=1
-    # 移除 --gc-interval=100，避免在 15% CPU 下频繁 GC 抢占算力
+    # 保持 24MB 极限压制，防爆物理内存
     export NODE_OPTIONS="--max-old-space-size=24 --optimize-for-size"
 
 elif [ "$TOTAL_MEM_MB" -lt 256 ]; then

@@ -2,14 +2,17 @@
 set -e
 
 # ================== 端口设置 ==================
-export TUIC_PORT=${TUIC_PORT:-""}                # 填入tuic节点端口
-export HY2_PORT=${HY2_PORT:-""}                  # 填入hy2节点端口
-export REALITY_PORT=${REALITY_PORT:-""}          # 填入reality节点端口（UDP/TCP可以共用1个端口）
 
-# ================== 强制切换到脚本所在目录 ==================
+export TUIC_PORT=${TUIC_PORT:-""}                     # 填入tuic节点端口
+
+export HY2_PORT=${HY2_PORT:-""}                       # 填入hy2节点端口
+
+export REALITY_PORT=${REALITY_PORT:-""}               # 填入reality节点端口（UDP/TCP可以共用1个端口）
+
+# ==============================================
+
+
 cd "$(dirname "$0")"
-
-# ================== 环境变量 & 绝对路径 ==================
 export FILE_PATH="${PWD}/.npm"
 export DATA_PATH="${PWD}/singbox_data"
 mkdir -p "$FILE_PATH" "$DATA_PATH"
@@ -18,7 +21,6 @@ export XDG_CACHE_HOME="/tmp/.singbox_cache"
 export TMPDIR="/tmp"
 rm -rf "${FILE_PATH}"/sb_* ~/.npm/_logs/* ./npm-debug.log* "${DATA_PATH}"/* /tmp/.singbox_* 2>/dev/null || true
 
-# ================== UUID 固定保存（核心逻辑）==================
 UUID_FILE="${FILE_PATH}/uuid.txt"
 if [ -f "$UUID_FILE" ]; then
   UUID=$(cat "$UUID_FILE")
@@ -30,10 +32,8 @@ else
   echo -e "\e[1;32m[UUID] 首次生成并永久保存: $UUID\e[0m"
 fi
 
-# ================== 创建目录 ==================
 [ ! -d "${FILE_PATH}" ] && mkdir -p "${FILE_PATH}"
 
-# ================== 动态获取最新版本 & 下载 sing-box ==================
 # 自动通过 API 获取最新的 release 版本号（剥离 v 前缀），若 API 受限则以 1.11.4 保底
 SINGBOX_VER=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
 if [ -z "$SINGBOX_VER" ]; then
@@ -67,7 +67,6 @@ download_file() {
   fi
 }
 
-# 优化：采用固定的文件名 sb_core，避免每次重启都生成随机名文件导致重复占用磁盘
 SINGBOX_BIN="${FILE_PATH}/sb_core"
 if [ ! -f "$SINGBOX_BIN" ]; then
   echo -e "\e[1;33m[下载] 未检测到 Sing-box 核心，正在下载最新版本 v${SINGBOX_VER}...\e[0m"
@@ -98,9 +97,9 @@ if [ "$REALITY_PORT" != "" ] && [ "$REALITY_PORT" != "0" ]; then
   fi
 fi
 
-# ================== 生成证书（自签或固定）==================
-if ! command -v openssl >/dev/null 2>&1; then
-  cat > "${FILE_PATH}/private.key" <<'EOF'
+if [ ! -f "${FILE_PATH}/cert.pem" ] || [ ! -f "${FILE_PATH}/private.key" ]; then
+  if ! command -v openssl >/dev/null 2>&1; then
+    cat > "${FILE_PATH}/private.key" <<'EOF'
 -----BEGIN EC PARAMETERS-----
 BgqghkjOPQQBw==
 -----END EC PARAMETERS-----
@@ -110,7 +109,7 @@ AwEHoUQDQgAE1kHafPj07rJG+HboH2ekAI4r+e6TL38GWASAnngZreoQDF16ARa
 /TsyLyFoPkhTxSbehH/OBEjHtSZGaDhMqQ==
 -----END EC PRIVATE KEY-----
 EOF
-  cat > "${FILE_PATH}/cert.pem" <<'EOF'
+    cat > "${FILE_PATH}/cert.pem" <<'EOF'
 -----BEGIN CERTIFICATE-----
 MIIBejCCASGgAwIBAgIUFWeQL3556PNJLp/veCFxGNj9crkwCgYIKoZIzj0EAwIw
 EzERMA8GA1UEAwwIYmluZy5jb20wHhcNMjUwMTAxMDEwMTAwWhcNMzUwMTAxMDEw
@@ -122,60 +121,71 @@ Af8EBTADAQH/MAoGCCqGSM49BAMCA0cAMEQCIARDAJvg0vd/ytrQVvEcSm6XTlB+
 eQ6OFb9LbLYL9Zi+AiffoMbi4y/0YUQlTtz7as9S8/lciBF5VCUoVIKS+vX2g==
 -----END CERTIFICATE-----
 EOF
-else
-  openssl ecparam -genkey -name prime256v1 -out "${FILE_PATH}/private.key" 2>/dev/null
-  openssl req -new -x509 -days 3650 -key "${FILE_PATH}/private.key" -out "${FILE_PATH}/cert.pem" -subj "/CN=bing.com" 2>/dev/null
+  else
+    openssl ecparam -genkey -name prime256v1 -out "${FILE_PATH}/private.key" 2>/dev/null
+    openssl req -new -x509 -days 3650 -key "${FILE_PATH}/private.key" -out "${FILE_PATH}/cert.pem" -subj "/CN=bing.com" 2>/dev/null
+  fi
+  chmod 600 "${FILE_PATH}/private.key"
 fi
-chmod 600 "${FILE_PATH}/private.key"
 
-# ================== 生成 config.json ==================
+INBOUNDS=()
+
+if [ -n "$TUIC_PORT" ] && [ "$TUIC_PORT" != "0" ]; then
+  INBOUNDS+=("{
+    \"type\": \"tuic\",
+    \"listen\": \"::\",
+    \"listen_port\": $TUIC_PORT,
+    \"users\": [{\"uuid\": \"$UUID\", \"password\": \"admin\"}],
+    \"congestion_control\": \"bbr\",
+    \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"${FILE_PATH}/cert.pem\", \"key_path\": \"${FILE_PATH}/private.key\"}
+  }")
+fi
+
+if [ -n "$HY2_PORT" ] && [ "$HY2_PORT" != "0" ]; then
+  INBOUNDS+=("{
+    \"type\": \"hysteria2\",
+    \"listen\": \"::\",
+    \"listen_port\": $HY2_PORT,
+    \"users\": [{\"password\": \"$UUID\"}],
+    \"masquerade\": \"https://bing.com\",
+    \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"${FILE_PATH}/cert.pem\", \"key_path\": \"${FILE_PATH}/private.key\"}
+  }")
+fi
+
+if [ -n "$REALITY_PORT" ] && [ "$REALITY_PORT" != "0" ]; then
+  INBOUNDS+=("{
+    \"type\": \"vless\",
+    \"listen\": \"::\",
+    \"listen_port\": $REALITY_PORT,
+    \"users\": [{\"uuid\": \"$UUID\", \"flow\": \"xtls-rprx-vision\"}],
+    \"tls\": {
+      \"enabled\": true,
+      \"server_name\": \"www.nazhumi.com\",
+      \"reality\": {
+        \"enabled\": true,
+        \"handshake\": {\"server\": \"www.nazhumi.com\", \"server_port\": 443},
+        \"private_key\": \"$private_key\",
+        \"short_id\": [\"\"]
+      }
+    }
+  }")
+fi
+
+IFS=','
 cat > "${FILE_PATH}/config.json" <<EOF
 {
   "log": { "disabled": true },
-  "inbounds": [$( \
-    [ "$TUIC_PORT" != "" ] && [ "$TUIC_PORT" != "0" ] && echo "{
-      \"type\": \"tuic\",
-      \"listen\": \"::\",
-      \"listen_port\": $TUIC_PORT,
-      \"users\": [{\"uuid\": \"$UUID\", \"password\": \"admin\"}],
-      \"congestion_control\": \"bbr\",
-      \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"${FILE_PATH}/cert.pem\", \"key_path\": \"${FILE_PATH}/private.key\"}
-    },"; \
-    [ "$HY2_PORT" != "" ] && [ "$HY2_PORT" != "0" ] && echo "{
-      \"type\": \"hysteria2\",
-      \"listen\": \"::\",
-      \"listen_port\": $HY2_PORT,
-      \"users\": [{\"password\": \"$UUID\"}],
-      \"masquerade\": \"https://bing.com\",
-      \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"${FILE_PATH}/cert.pem\", \"key_path\": \"${FILE_PATH}/private.key\"}
-    },"; \
-    [ "$REALITY_PORT" != "" ] && [ "$REALITY_PORT" != "0" ] && echo "{
-      \"type\": \"vless\",
-      \"listen\": \"::\",
-      \"listen_port\": $REALITY_PORT,
-      \"users\": [{\"uuid\": \"$UUID\", \"flow\": \"xtls-rprx-vision\"}],
-      \"tls\": {
-        \"enabled\": true,
-        \"server_name\": \"www.nazhumi.com\",
-        \"reality\": {
-          \"enabled\": true,
-          \"handshake\": {\"server\": \"www.nazhumi.com\", \"server_port\": 443},
-          \"private_key\": \"$private_key\",
-          \"short_id\": [\"\"]
-        }
-      }
-    }"; \
-  )],
+  "inbounds": [
+    ${INBOUNDS[*]}
+  ],
   "outbounds": [{"type": "direct"}]
 }
 EOF
 
-# ================== 启动 sing-box ==================
-"$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" &
+"$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" >/dev/null 2>&1 &
 SINGBOX_PID=$!
 echo "[SING-BOX] 启动完成 PID=$SINGBOX_PID"
 
-# ================== 获取 IP & ISP ==================
 IP=$(curl -s --max-time 2 ipv4.ip.sb || curl -s --max-time 1 api.ipify.org || echo "IP_ERROR")
 ISP=$(curl -s --max-time 2 https://speed.cloudflare.com/meta | awk -F'"' '{print $26"-"$18}' || echo "0.0")
 
@@ -189,7 +199,6 @@ base64 "${FILE_PATH}/list.txt" | tr -d '\n' > "${FILE_PATH}/sub.txt"
 cat "${FILE_PATH}/list.txt"
 echo -e "\n\e[1;32m${FILE_PATH}/sub.txt 已保存\e[0m"
 
-# ================== 启动定时重启（前台阻塞） ==================
 schedule_restart() {
   echo "[定时重启:Sing-box] 已启动（北京时间 00:03）"
   LAST_RESTART_DAY=-1
@@ -201,8 +210,7 @@ schedule_restart() {
     M=$(( (beijing_ts / 60) % 60 ))
     D=$(( beijing_ts / 86400 ))
 
-    # ---- 时间匹配 → 重启 sing-box ----
-    if [ "$H" -eq 00 ] && [ "$M" -eq 03 ] && [ "$D" -ne "$LAST_RESTART_DAY" ]; then
+    if [ "$H" -eq 0 ] && [ "$M" -eq 3 ] && [ "$D" -ne "$LAST_RESTART_DAY" ]; then
       echo "[定时重启:Sing-box] 到达 00:03 → 重启 sing-box"
       LAST_RESTART_DAY=$D
 
@@ -211,15 +219,14 @@ schedule_restart() {
 
       rm -rf ~/.npm/_logs/* ./npm-debug.log* "${DATA_PATH}"/* /tmp/.singbox_* 2>/dev/null || true
 
-      "$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" &
+      "$SINGBOX_BIN" run -c "${FILE_PATH}/config.json" >/dev/null 2>&1 &
       SINGBOX_PID=$!
 
       echo "[Sing-box重启完成] 新 PID: $SINGBOX_PID"
     fi
 
-    sleep 1
+    sleep 30
   done
 }
 
-# ★★★ 关键：保持脚本前台运行，不能退出
 schedule_restart

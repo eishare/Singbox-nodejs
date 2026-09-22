@@ -73,27 +73,27 @@ if (totalMemMB <= 160) {
   singboxMemLimit = "80MiB";
   cloudflaredMemLimit = "140MiB";
   dynamicGOGC = "100";
-  dynamicProcs = "2";
+  dynamicProcs = "1";
 } else if (totalMemMB < 320) {
   singboxMemLimit = "128MiB";
   cloudflaredMemLimit = "220MiB";
   dynamicGOGC = "100";
-  dynamicProcs = "2";
+  dynamicProcs = "1";
 } else if (totalMemMB < 448) {
   singboxMemLimit = "160MiB";
   cloudflaredMemLimit = "320MiB";
   dynamicGOGC = "100";
-  dynamicProcs = "2";
+  dynamicProcs = "1";
 } else if (totalMemMB < 512) {
   singboxMemLimit = "200MiB";
   cloudflaredMemLimit = "400MiB";
   dynamicGOGC = "120";
-  dynamicProcs = "2";
+  dynamicProcs = "1";
 } else {
   singboxMemLimit = "384MiB";
   cloudflaredMemLimit = "768MiB";
   dynamicGOGC = "100";
-  dynamicProcs = process.env.GOMAXPROCS || "4"; 
+  dynamicProcs = process.env.GOMAXPROCS || "1"; 
 }
 
 const GO_BASE_ENV = {

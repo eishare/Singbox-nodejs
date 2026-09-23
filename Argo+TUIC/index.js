@@ -9,7 +9,7 @@ const ARGO_PORT = process.env.ARGO_PORT || "8001";                             /
 
 const ARGO_PROTOCOL = process.env.ARGO_PROTOCOL || "quic";                     // http2或quic（http2=稳定+低占用；quic=响应快+占用略高）
 
-const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "1";                  // 隧道连接数量 建议http2<4，quic=1 （多条UDP会增加占用，也可能会触发机房QoS）
+const ARGO_CONNECTIONS = process.env.ARGO_CONNECTIONS || "1";                  // 隧道连接数量 建议http2≤4，quic=1 （多条UDP会增加占用，也可能会触发机房QoS）
 
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || "";                             // 固定隧道域名
 

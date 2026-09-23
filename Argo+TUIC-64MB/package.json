@@ -1,5 +1,5 @@
 {
-  "name": "argo-tuic-pterodactyl",
+  "name": "argo-tuic-easyshare",
   "version": "1.0.0",
   "description": "Lightweight Argo Tunnel and TUIC deployment script for Pterodactyl",
   "main": "index.js",

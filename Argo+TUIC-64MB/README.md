@@ -1,4 +1,4 @@
-## 📦 翼龙面板 Node.js 环境部署指南（内存64MB：Freecloudpanel）
+## 📦 翼龙面板 Node.js 环境部署指南（内存64MB：Freecloudpanel。同时适用内存100MB）
 
 ### ✨ 核心特性
 

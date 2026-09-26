@@ -13,7 +13,7 @@ export MALLOC_ARENA_MAX=2
 
 while true; do
 
-    node --expose-gc --max-old-space-size=24 index.js
+    node --max-old-space-size=18 --expose-gc index.js
     
     EXIT_CODE=$?
     

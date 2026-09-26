@@ -34,18 +34,6 @@ const readline = require("readline");
 const { spawn, execSync } = require("child_process");
 
 const log = (msg) => process.stdout.write(msg + "\n");
-const TOTAL_MEM_MB = Math.floor(os.totalmem() / 1024 / 1024);
-
-function getGcInterval(totalMB) {
-  if (totalMB < 160) return 8 * 60 * 1000;   
-  if (totalMB < 256) return 10 * 60 * 1000; 
-  if (totalMB < 320) return 12 * 60 * 1000; 
-  if (totalMB < 448) return 15 * 60 * 1000; 
-  if (totalMB < 576) return 15 * 60 * 1000; 
-  return 20 * 60 * 1000;                    
-}
-
-const gcIntervalMs = getGcInterval(TOTAL_MEM_MB);
 
 const iataMap = {
   HKG: "香港", TPE: "台湾", NRT: "日本", HND: "日本", KIX: "日本",

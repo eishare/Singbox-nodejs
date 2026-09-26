@@ -326,7 +326,7 @@ async function main() {
         }
       ],
       strategy: "prefer_ipv4",
-      independent_cache: true
+      independent_cache: false
     },
     inbounds: inbounds,
     outbounds: [{ type: "direct", tag: "direct", udp_fragment: true }],

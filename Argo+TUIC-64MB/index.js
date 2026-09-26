@@ -46,8 +46,7 @@ const GO_BASE_ENV = {
   ...process.env,
   GODEBUG: "madvdontneed=1,cgocheck=0,netdns=go",
   GOMAXPROCS: "1",
-  GOGC: "18",
-  GOMEMLIMIT: "18MiB"
+  GOGC: "18"
 };
 const SINGBOX_MEM_LIMIT = "16MiB";
 const CLOUDFLARED_MEM_LIMIT = "18MiB";

@@ -48,8 +48,8 @@ const GO_BASE_ENV = {
   GOMAXPROCS: "1",
   GOGC: "18"
 };
-const SINGBOX_MEM_LIMIT = "16MiB";
-const CLOUDFLARED_MEM_LIMIT = "18MiB";
+const SINGBOX_MEM_LIMIT = "14MiB";
+const CLOUDFLARED_MEM_LIMIT = "16MiB";
 
 if (!fs.existsSync(FILE_PATH)) fs.mkdirSync(FILE_PATH, { recursive: true });
 
